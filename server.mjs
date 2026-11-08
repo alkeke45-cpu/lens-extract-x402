@@ -42,6 +42,66 @@ function paymentRequirements(resourcePath) {
   };
 }
 
+// --- Discovery documents (added 2026-11-08, wave 5) ---
+// x402scan's canonical discovery format is an OpenAPI 3.1 doc at /openapi.json
+// whose paid operations carry x-payment-info + a 402 response (see
+// https://www.x402scan.com/discovery/spec). The 402 body also declares a
+// CDP Bazaar extension (info + schema) so any Bazaar-aware facilitator that
+// ever settles a call has the metadata to catalog; CDP itself only indexes
+// after a settlement through the CDP Facilitator.
+function bazaarExtension() {
+  const input = { type: "http", method: "POST", bodyType: "json", body: { url: "https://example.com/article", maxChars: 20000 } };
+  const output = { type: "json", example: { url: "https://example.com/article", finalUrl: "https://example.com/article", title: "Example", markdown: "# Example\n\nClean article text.", text: "Example Clean article text.", wordCount: 4, truncated: false } };
+  return {
+    info: { input, output },
+    schema: {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        input: {
+          type: "object",
+          properties: {
+            type: { const: "http" }, method: { enum: ["POST"] }, bodyType: { enum: ["json"] },
+            body: { type: "object", properties: { url: { type: "string" }, maxChars: { type: "number" } }, required: ["url"] },
+          },
+          required: ["type", "method", "bodyType", "body"],
+        },
+        output: { type: "object", properties: { type: { type: "string" }, example: { type: "object" } }, required: ["type"] },
+      },
+      required: ["input"],
+    },
+  };
+}
+
+function openApiDoc(origin) {
+  return {
+    openapi: "3.1.0",
+    info: {
+      title: "LensExtract",
+      version: "1.0.0",
+      description: "Extract clean readable markdown/text from any public web page URL.",
+      "x-guidance": "Use POST /v1/extract to extract clean markdown from a public web page. Send a JSON body with a 'url' field (required) and optional 'maxChars'. Payment is x402: $0.001 USDC on Base per call; call without payment to receive the 402 payment requirements, then retry with an X-PAYMENT header.",
+      contact: { email: "alkeke45@gmail.com" },
+    },
+    servers: [{ url: origin }],
+    paths: {
+      "/v1/extract": {
+        post: {
+          operationId: "extract",
+          summary: "Extract - Clean markdown/text extraction from a web page URL",
+          tags: ["Data"],
+          "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.001000" }, protocols: [{ x402: {} }] },
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { url: { type: "string", description: "Public http(s) page URL to extract" }, maxChars: { type: "number", description: "Max characters of markdown returned (default 20000, cap 50000)" } }, required: ["url"] } } } },
+          responses: {
+            "200": { description: "Successful response", content: { "application/json": { schema: { type: "object", properties: { url: { type: "string" }, finalUrl: { type: "string" }, title: { type: "string" }, markdown: { type: "string" }, text: { type: "string" }, wordCount: { type: "number" }, truncated: { type: "boolean" } }, required: ["url", "markdown"] } } } },
+            "402": { description: "Payment Required" },
+          },
+        },
+      },
+    },
+  };
+}
+
 function sendJson(res, status, obj) {
   const body = JSON.stringify(obj);
   res.writeHead(status, { "content-type": "application/json", "content-length": Buffer.byteLength(body) });
@@ -49,7 +109,7 @@ function sendJson(res, status, obj) {
 }
 
 function paymentRequiredBody(resourcePath, error) {
-  return { x402Version: 1, accepts: [paymentRequirements(resourcePath)], error };
+  return { x402Version: 1, accepts: [paymentRequirements(resourcePath)], error, extensions: { bazaar: bazaarExtension() } };
 }
 
 async function facilitator(path, payload) {
@@ -153,7 +213,12 @@ const server = http.createServer(async (req, res) => {
   try {
     if (u.pathname === "/health") return sendJson(res, 200, { ok: true, service: "lens-extract", version: "1.0.0" });
 
-    if (u.pathname === "/" || u.pathname === "/.well-known/x402") {
+    if (u.pathname === "/openapi.json") {
+      const origin = RESOURCE_BASE || `http://${req.headers.host || "localhost"}`;
+      return sendJson(res, 200, openApiDoc(origin.replace(/\/$/, "")));
+    }
+
+    if (u.pathname === "/" || u.pathname === "/.well-known/x402" || u.pathname === "/.well-known/x402.json") {
       return sendJson(res, 200, {
         name: "LensExtract",
         description: "Pay-per-call URL-to-clean-markdown extraction for AI agents, priced in micro-USDC via x402.",

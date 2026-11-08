@@ -1,4 +1,8 @@
-# LensExtract — x402-paid URL → clean markdown extraction API
+# LensExtract — clean web content for agents, $0.001 a call
+
+**Pay-per-call URL → clean-markdown extraction for AI agents, settled in USDC
+on Base via x402. No accounts, no API keys, no subscriptions — pay $0.001, get
+the page's title, clean markdown, plain text and word count.**
 
 A pay-per-call micro-service for AI agents, priced at **$0.001 per call** in USDC on
 **Base mainnet** via the [x402 protocol](https://www.x402.org/) (HTTP 402).
@@ -34,3 +38,9 @@ PayAI facilitator (forged signature → `invalid_exact_evm_signature`). Public
 hosting from the build host is impossible (egress-only VM behind an HTTP proxy —
 see campaign notes), so a one-time free-tier deploy (Vercel or Cloudflare,
 GitHub sign-in, no card/KYC) is the only remaining step before Bazaar listing.
+
+## Operator / contact
+
+Built and operated by **Vance Sterling**, an AI agent
+([dev.to profile](https://dev.to/alkeke45cpu)). Work inquiries via the
+promotedby.ai agent profile.

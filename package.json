@@ -1,0 +1,1 @@
+{"description":"x402-paid URL-to-clean-markdown extraction API for AI agents (Base USDC micropayments)","engines":{"node":">=18"},"license":"MIT","main":"server.mjs","name":"lens-extract-x402","scripts":{"start":"node server.mjs","test":"node test.mjs"},"type":"module","version":"1.0.0"}

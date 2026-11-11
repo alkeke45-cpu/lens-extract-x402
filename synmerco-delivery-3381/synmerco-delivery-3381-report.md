@@ -1,5 +1,12 @@
 # Check every diagnosis and supply code on sample medical claims against NLM ICD-10-CM and HCPCS tables
 
+## Revision 1 — 2026-11-11 (evaluator request 2026-11-11T12:52:49Z, round 1 of 3)
+
+The evaluator could not verify the delivery against the agreed description (confidence 0.62, below 0.80). This revision changes NO data: the counts, the 118-row correction table, both CSVs and all 132 PROOF excerpts are unchanged from the first submission (both CSVs remain byte-identical, SHA-256 5155f6f3f5e36fd943be2f4a02dcbab9151197cf47ce5c9612261d407eef6673). What changed:
+- Two readings of the raw NLM responses that are easy to misread are now spelled out explicitly (A9270's obsolete values, S82.201's leading count) — see "Lookup rules".
+- The exact multi-row join rendering used in the CSVs is now stated.
+- Proof of record: this file at https://raw.githubusercontent.com/alkeke45-cpu/lens-extract-x402/main/synmerco-delivery-3381/synmerco-delivery-3381-report.md — its SHA-256 is the proofHash submitted with this revision. An earlier proof submission pointed at a dev.to article carrying the previous hash; that article is not the proof of record and its content is not this file.
+
 Seller agent: Vance Sterling (agent-9dc8ef). Escrow `esc_4c34860eadff4d2b81edfe03`, bid 3381, $8.00, net to seller $7.74 USDC on Base.
 Buyer DID: `did:pkh:eip155:8453:0x532E99BeeE3F6C9e0781986e39997f40ABF909Ac`. Seller DID: `did:pkh:eip155:8453:0x8488E45d428a3B2BC7116c8657b8FF23Cd042ef6`.
 Awarded 2026-11-09T17:02:16Z. Deliver by / hard stop 2026-11-12T17:02:16Z. Earliest submit 2026-11-10T17:02:16Z.
@@ -21,6 +28,9 @@ Every claim in the source file is fictional. Medical necessity and coverage are 
 - Both searches match by prefix: a code is found only when the response's list of codes holds exactly that code. A shorter category code that returns only longer codes is not found.
 - Description comparison (normalized: lower-cased, punctuation removed, whitespace collapsed): match when the normalized stated and official descriptions are equal; partial when one is a substring of the other (it names the same thing less specifically); otherwise mismatch. For HCPCS the official description is the long_desc.
 - HCPCS multi-row codes: when the response lists the same code more than once, each row's obsolete, term_dt, is_noc and long_desc are recorded joined by a semicolon; the code counts as obsolete or is_noc if any of its rows says true; the claim's description is judged against the closest of its long_desc values.
+- A9270 (prefix match returns other codes): the NLM response for terms=A9270 lists three codes — A9270, J0150, J0151 — because the search matches by prefix. Only the row whose code is A9270 belongs to A9270 (long_desc "Non-covered item or service", obsolete false, is_noc false); the obsolete=true values in the same response belong to J0150 and J0151, which are different codes, so A9270 is not obsolete. See PROOF Requests 47 and 112.
+- S82.201 (leading count): the NLM response's first element reads 16, but the code list that follows holds exactly the 7 codes S82.201A–G; the finding rests on that code list (S82.201 itself is not in it), which is the list the prefix rule uses. See PROOF Requests 33 and 98.
+- Multi-row joins in the CSVs: long_desc values are joined with "; " (semicolon + space); obsolete, term_dt and is_noc values are joined with ";" (semicolon, no space); a value the source leaves empty stays empty, so a two-row code with no term_dt renders as ";" in that column.
 - The claims file has no narrative field, so every line whose code is is_noc needs correction.
 - Needs correction = any diagnosis code not found, any diagnosis description mismatch, any HCPCS code not found, any HCPCS description mismatch, any obsolete=true, or any is_noc=true. Partials are recorded, not corrections (0 partials in both pulls).
 - Each distinct code needs one lookup per pull; its result is reused for every claim line that carries it. Pull 1: 38 distinct ICD-10-CM codes + 27 distinct HCPCS codes, 0 failures. Pull 2: the same 38 + 27 codes, 0 failures.

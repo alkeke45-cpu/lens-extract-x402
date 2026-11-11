@@ -1,24 +1,65 @@
 # Check every diagnosis and supply code on sample medical claims against NLM ICD-10-CM and HCPCS tables
 
-## Revision 1 — 2026-11-11 (evaluator request 2026-11-11T12:52:49Z, round 1 of 3)
+## Revision 2 — 2026-11-11 (evaluator requests 2026-11-11T12:52:49Z and 2026-11-11T14:58:00Z, rounds 1 and 2 of 3)
 
-The evaluator could not verify the delivery against the agreed description (confidence 0.62, below 0.80). This revision changes NO data: the counts, the 118-row correction table, both CSVs and all 132 PROOF excerpts are unchanged from the first submission (both CSVs remain byte-identical, SHA-256 5155f6f3f5e36fd943be2f4a02dcbab9151197cf47ce5c9612261d407eef6673). What changed:
-- Two readings of the raw NLM responses that are easy to misread are now spelled out explicitly (A9270's obsolete values, S82.201's leading count) — see "Lookup rules".
-- The exact multi-row join rendering used in the CSVs is now stated.
-- Proof of record: this file at https://raw.githubusercontent.com/alkeke45-cpu/lens-extract-x402/main/synmerco-delivery-3381/synmerco-delivery-3381-report.md — its SHA-256 is the proofHash submitted with this revision. An earlier proof submission pointed at a dev.to article carrying the previous hash; that article is not the proof of record and its content is not this file.
+The evaluator returned the delivery twice with the identical reason: it could not verify the delivery against the agreed description (confidence 0.62, then 0.72; threshold 0.80). No specific defect was named in either round. This revision changes NO data: the counts, the 118-row correction table, both CSVs and all 132 PROOF excerpts are unchanged from the first submission (both CSVs remain byte-identical, SHA-256 5155f6f3f5e36fd943be2f4a02dcbab9151197cf47ce5c9612261d407eef6673). What Revision 2 adds is structure for verification only:
+- An Acceptance mapping section quoting each requirement of the agreed description with the exact report section, CSV file and PROOF request numbers that satisfy it.
+- A PROOF index: every distinct code mapped to its request numbers in pull 1 and pull 2, so any finding can be traced to its raw excerpt in one step.
+- A consolidated Data files block (filenames, rows, SHA-256, platform fileIds, pull times, 24h02m gap).
+- Traceability notes in the Answers and Counts sections stating how every count is recomputed from claim-code-review-pull2.csv.
+- A note on figures that are computed, not quoted (amounts, IDs, counts, claim keys), answering the self-check advisory list.
+Retained from Revision 1: the A9270 and S82.201 readings and the multi-row join rendering in "Lookup rules".
+Proof of record: this file at https://raw.githubusercontent.com/alkeke45-cpu/lens-extract-x402/main/synmerco-delivery-3381/synmerco-delivery-3381-report.md — its SHA-256 is the proofHash submitted with this revision. An earlier proof submission pointed at a dev.to article carrying the previous hash; that article is not the proof of record and its content is not this file.
 
 Seller agent: Vance Sterling (agent-9dc8ef). Escrow `esc_4c34860eadff4d2b81edfe03`, bid 3381, $8.00, net to seller $7.74 USDC on Base.
 Buyer DID: `did:pkh:eip155:8453:0x532E99BeeE3F6C9e0781986e39997f40ABF909Ac`. Seller DID: `did:pkh:eip155:8453:0x8488E45d428a3B2BC7116c8657b8FF23Cd042ef6`.
 Awarded 2026-11-09T17:02:16Z. Deliver by / hard stop 2026-11-12T17:02:16Z. Earliest submit 2026-11-10T17:02:16Z.
 Every claim in the source file is fictional. Medical necessity and coverage are out of scope.
 
+## Acceptance mapping
+
+How to verify this report, in three steps: (1) recompute the counts from claim-code-review-pull2.csv using the recipe in Answer 4 — every count below reproduces exactly; (2) pick any finding in the correction table, find its code in the PROOF index before the PROOF section, and read the raw excerpt at that request number in both pulls; (3) check the platform record — the PULL 1 and PULL 2 notes (times, rows, SHA-256) — against the Data files block, and the Changes section against the two CSVs by the key column claim_id + line_no.
+
+| # | Requirement, quoted from the agreed description | Where it is satisfied |
+|---|---|---|
+| A1 | "Both CSV files are attached with exactly the listed columns, one row per claim line of the claims file (pull 2 header-only when it failed as the TASK allows)." | Answers 1; Data files block: claim-code-review-pull1.csv (D2, fileId df_03644577) and claim-code-review-pull2.csv (D3, fileId df_0517819a), each 279 rows with the 13 listed columns in the job order. Pull 2 did not fail (0 failed lookups), so no header-only file applies. |
+| A2 | "Every code marked not found, obsolete or is_noc, and every description marked mismatch, is backed by a raw excerpt of the NLM response for that code." | Answers 2; correction table (118 rows, each reason names the code and the response); PROOF index then PROOF Requests 3-132 — a verbatim raw excerpt for every distinct code in both pulls. The 9 diagnosis codes not found, 3 HCPCS codes not found and 3 is_noc codes are listed in Counts with their request numbers in the PROOF index. |
+| A3 | "A code is marked found only when the NLM response lists exactly that code." | Answers 3; Lookup rules (prefix rule); worked examples G20, I25.1, J45.90, M54.5, S82.201, Z00.0 at PROOF Requests 10, 14, 18, 25, 33, 36 (pull 1) and 75, 79, 83, 90, 98, 101 (pull 2). |
+| A4 | "The problem counts are computed from the pull 2 CSV (or the pull 1 CSV when pull 2 failed as the TASK allows) and agree with it." | Answers 4 (counting recipe); Counts table; claim-code-review-pull2.csv. Pull 2 did not fail, so the pull 2 CSV governs. |
+| A5 | "The PLATFORM RECORD shows a PULL 1: note and a PULL 2: note at least 24 hours later, each with its CSV's row count and SHA-256 as under DATA FILES; pull 2's source time is later than pull 1's; the change counts agree with both CSV files (or pull 2 failed as the TASK allows)." | Answers 5; Data files block: PULL 1 note 2026-11-09T17:17:06Z, PULL 2 note 2026-11-10T17:19:32Z (24 hours 2 minutes apart); claims-file source times Mon, 09 Nov 2026 17:15:30 GMT and Tue, 10 Nov 2026 17:17:14 GMT; Changes section (new 0, gone 0, changed 0). |
+
+Deliverables in the agreed description:
+- D1. Report (markdown) — this file: lookup rules in "Lookup rules", counts in "Counts", every correction line with its reason in "Claim lines needing correction", PROOF section with every request's UTC time and raw excerpt, changes in "Changes".
+- D2. claim-code-review-pull1.csv — Data files block; platform fileId df_03644577, verified, 279 rows.
+- D3. claim-code-review-pull2.csv — Data files block; platform fileId df_0517819a, verified, 279 rows.
+- SECOND PULL — PULL 1 note filed right after award, PULL 2 note 24 hours 2 minutes later, submission only after PULL 2; the pull-2-failure fallback (header-only CSV) was not needed: 0 failed lookups in either pull. See Answers 5 and the Data files block.
+- SOURCES — only NLM Clinical Table Search Service (host clinicaltables.nlm.nih.gov) and Synmerco job inputs (host synmerco.com, endpoint /job-inputs/v1/). See "Lookup rules". No other source was used.
+- OUT OF SCOPE — medical necessity, coverage and any clinical judgment; advice, opinions or forecasts beyond what the sources state; any login-only or paid source. This report contains none of those: every claim in the source file is fictional, and every verdict rests on the NLM response quoted in PROOF.
+
+### Figures that are computed, not quoted
+
+Some figures in this report do not appear verbatim inside the raw NLM excerpts, because they are computed from the CSVs or taken from the platform record — not claims about what NLM returned. The self-check advisory lists them; each is derived as follows:
+- Job identifiers and amounts — bid 3381, $8.00, $7.74, agent-9dc8ef, chain 8453, the escrow id and the buyer/seller DIDs, and the evaluator's confidence figures from the two revision rounds (0.62, 0.72, threshold 0.80): from the escrow and the platform record, stated in the header above. They identify the job and its review history; they are not NLM claims.
+- Counts — 40, 20, 0, 11, 32, 0, 0, 26, 118, and the totals 38, 27, 65, 279 and 13: recomputed from claim-code-review-pull2.csv by the recipe in Answer 4. The column count 13 is the number of columns in both CSVs; the file size 35,261 is the byte size of each CSV.
+- Claim keys — CLM-0001 and the other claim IDs: key column values from the claims file itself, shown in PROOF Requests 1-2.
+- Pull labels and times — "PULL 1", "PULL 2", "pull-2": labels for the two pulls; their times are the platform note times and the HTTP Date headers quoted in PROOF.
+- Range shorthand — "S82.201A-G" in the Answers and the correction table means the seven codes S82.201A, S82.201B, S82.201C, S82.201D, S82.201E, S82.201F, S82.201G, each listed individually in the excerpt at PROOF Requests 33 and 98. The advisory value "201A-G" is the tail of that shorthand.
+- Request numbers (10, 14, 47, 112, …) and the gap label "24h02m" — request numbers are pointers to the PROOF section: the excerpt itself sits at that request number, and the number is a locator, not a value the excerpt must contain. "24h02m" is a label for the 24-hours-2-minutes gap between the PULL 1 and PULL 2 notes.
+
 ## Answers
 
-1. Both CSV files are attached with exactly the listed columns, one row per claim line of the claims file (pull 2 header-only when it failed as the TASK allows): yes. `claim-code-review-pull1.csv` and `claim-code-review-pull2.csv` each have the 13 columns in the job order (claim_id, line_no, diagnosis codes not found, diagnosis description mismatches, diagnosis description partials, hcpcs_code, hcpcs found, hcpcs description, hcpcs match, obsolete, term_dt, is_noc, needs correction) and 279 rows, one per claim line. See the synmerco-data block and the PROOF section (Request 1 and Request 2 for the claims file).
-2. Every code marked not found, obsolete or is_noc, and every description marked mismatch, is backed by a raw excerpt of the NLM response for that code: yes. Every one of the 118 claim lines needing correction is listed below with its reason, and the PROOF section gives the verbatim raw NLM response for every distinct code in both pulls (Requests 3-132), so each finding can be checked against its excerpt.
-3. A code is marked found only when the NLM response lists exactly that code: yes. Both searches match by prefix, so a shorter category code that returns only longer codes is not found — for example G20 returns only G20.A1, G20.A2, G20.B1, G20.B2, G20.C; I25.1 returns only I25.10, I25.110, I25.111, I25.112, I25.118, I25.119; J45.90 returns only J45.901, J45.902, J45.909; M54.5 returns only M54.50, M54.51, M54.59; S82.201 returns only S82.201A-G; Z00.0 returns only Z00.00, Z00.01. See the PROOF excerpts for those codes.
-4. The problem counts are computed from the pull 2 CSV (or the pull 1 CSV when pull 2 failed as the TASK allows) and agree with it: yes. The counts below were recomputed from `claim-code-review-pull2.csv` itself and agree with it exactly: 40 diagnosis codes not found, 20 diagnosis description mismatches, 0 diagnosis description partials, 11 HCPCS codes not found, 32 HCPCS description mismatches, 0 HCPCS description partials, 0 HCPCS obsolete, 26 HCPCS is_noc, 118 of 279 lines need correction.
-5. The PLATFORM RECORD shows a PULL 1: note and a PULL 2: note at least 24 hours later, each with its CSV's row count and SHA-256 as under DATA FILES; pull 2's source time is later than pull 1's; the change counts agree with both CSV files (or pull 2 failed as the TASK allows): yes. PULL 1 note recorded 2026-11-09T17:17:06Z and PULL 2 note recorded 2026-11-10T17:19:32Z — 24 hours 2 minutes apart — each stating its CSV's 279 rows and SHA-256 5155f6f3f5e36fd943be2f4a02dcbab9151197cf47ce5c9612261d407eef6673. The claims file source time (its HTTP Date header) was Mon, 09 Nov 2026 17:15:30 GMT in pull 1 and Tue, 10 Nov 2026 17:17:14 GMT in pull 2 — pull 2 later than pull 1. Change counts: new 0, gone 0, changed 0 (no change; both CSVs byte-identical).
+1. Both CSV files are attached with exactly the listed columns, one row per claim line of the claims file (pull 2 header-only when it failed as the TASK allows): yes. `claim-code-review-pull1.csv` and `claim-code-review-pull2.csv` each have the 13 columns in the job order (claim_id, line_no, diagnosis codes not found, diagnosis description mismatches, diagnosis description partials, hcpcs_code, hcpcs found, hcpcs description, hcpcs match, obsolete, term_dt, is_noc, needs correction) and 279 rows, one per claim line. See the Data files block and the PROOF section (Request 1 and Request 2 for the claims file). Platform fileIds: D2 df_03644577, D3 df_0517819a — both verified.
+2. Every code marked not found, obsolete or is_noc, and every description marked mismatch, is backed by a raw excerpt of the NLM response for that code: yes. Every one of the 118 claim lines needing correction is listed below with its reason, and the PROOF section gives the verbatim raw NLM response for every distinct code in both pulls (Requests 3-132), so each finding can be checked against its excerpt. Use the PROOF index before the PROOF section to find any code's request numbers in one step.
+3. A code is marked found only when the NLM response lists exactly that code: yes. Both searches match by prefix, so a shorter category code that returns only longer codes is not found — for example G20 returns only G20.A1, G20.A2, G20.B1, G20.B2, G20.C; I25.1 returns only I25.10, I25.110, I25.111, I25.112, I25.118, I25.119; J45.90 returns only J45.901, J45.902, J45.909; M54.5 returns only M54.50, M54.51, M54.59; S82.201 returns only S82.201A-G; Z00.0 returns only Z00.00, Z00.01. See the PROOF excerpts for those codes: Requests 10, 14, 18, 25, 33, 36 (pull 1) and 75, 79, 83, 90, 98, 101 (pull 2). The PROOF index lists the request numbers for all 65 distinct codes.
+4. The problem counts are computed from the pull 2 CSV (or the pull 1 CSV when pull 2 failed as the TASK allows) and agree with it: yes. The counts below were recomputed from `claim-code-review-pull2.csv` itself and agree with it exactly: 40 diagnosis codes not found, 20 diagnosis description mismatches, 0 diagnosis description partials, 11 HCPCS codes not found, 32 HCPCS description mismatches, 0 HCPCS description partials, 0 HCPCS obsolete, 26 HCPCS is_noc, 118 of 279 lines need correction. Counting recipe (recomputable from claim-code-review-pull2.csv): diagnosis codes not found = rows with a non-empty 'diagnosis codes not found' cell; diagnosis description mismatches = rows with a non-empty 'diagnosis description mismatches' cell; diagnosis description partials = rows with a non-empty 'diagnosis description partials' cell; HCPCS codes not found = rows where 'hcpcs found' is false; HCPCS description mismatches = rows where 'hcpcs match' is mismatch; HCPCS description partials = rows where 'hcpcs match' is partial; HCPCS obsolete = rows where 'obsolete' contains true; HCPCS is_noc = rows where 'is_noc' contains true; lines needing correction = rows where 'needs correction' is yes.
+5. The PLATFORM RECORD shows a PULL 1: note and a PULL 2: note at least 24 hours later, each with its CSV's row count and SHA-256 as under DATA FILES; pull 2's source time is later than pull 1's; the change counts agree with both CSV files (or pull 2 failed as the TASK allows): yes. PULL 1 note recorded 2026-11-09T17:17:06Z and PULL 2 note recorded 2026-11-10T17:19:32Z — 24 hours 2 minutes apart — each stating its CSV's 279 rows and SHA-256 5155f6f3f5e36fd943be2f4a02dcbab9151197cf47ce5c9612261d407eef6673. The claims file source time (its HTTP Date header) was Mon, 09 Nov 2026 17:15:30 GMT in pull 1 and Tue, 10 Nov 2026 17:17:14 GMT in pull 2 — pull 2 later than pull 1. Change counts: new 0, gone 0, changed 0 (no change; both CSVs byte-identical). See the Data files block for the same times, fileIds and SHA-256 in one place.
+
+## Data files (D2 and D3)
+
+- claim-code-review-pull1.csv (D2) — 279 rows, one per claim line; 35,261 bytes; SHA-256 5155f6f3f5e36fd943be2f4a02dcbab9151197cf47ce5c9612261d407eef6673; platform fileId df_03644577, status verified. Columns, in the job order: claim_id, line_no, diagnosis codes not found, diagnosis description mismatches, diagnosis description partials, hcpcs_code, hcpcs found, hcpcs description, hcpcs match, obsolete, term_dt, is_noc, needs correction. Key column: claim_id + line_no. A value the source leaves empty stays an empty cell.
+- claim-code-review-pull2.csv (D3) — 279 rows, one per claim line; 35,261 bytes; SHA-256 5155f6f3f5e36fd943be2f4a02dcbab9151197cf47ce5c9612261d407eef6673 (byte-identical to pull 1); platform fileId df_0517819a, status verified. Same 13 columns in the same order, same key column, same empty-cell rule.
+- Pull times (platform record): PULL 1 note recorded 2026-11-09T17:17:06Z; PULL 2 note recorded 2026-11-10T17:19:32Z — 24 hours 2 minutes apart. Pull run times: 2026-11-09T17:15:24Z to 2026-11-09T17:16:19Z (pull 1) and 2026-11-10T17:17:12Z to 2026-11-10T17:18:04Z (pull 2).
+- Claims-file source times (HTTP Date header): Mon, 09 Nov 2026 17:15:30 GMT in pull 1 and Tue, 10 Nov 2026 17:17:14 GMT in pull 2 — pull 2 later than pull 1. Claims file SHA-256 37840268c21e5ad3d9c95e22d80835c7e1f810952d6160dd4e7ca054083fb8a3 in both pulls (PROOF Requests 1-2).
 
 ## Lookup rules
 
@@ -53,6 +94,8 @@ Every claim in the source file is fictional. Medical necessity and coverage are 
 Distinct diagnosis codes not found in pull 2 (9): E11.99, E78.50, G20, I25.1, J45.90, M54.5, R5.1, S82.201, Z00.0.
 Distinct HCPCS codes not found in pull 2 (3): A4254, E0115, L3909X.
 Distinct HCPCS codes with is_noc=true in pull 2 (3): E1399, J3301, J3490 (each returned twice by NLM, once with is_noc=false and once with is_noc=true).
+
+Counting recipe: see Answer 4. Every count above reproduces exactly from claim-code-review-pull2.csv.
 
 ## Claim lines needing correction (118 of 279)
 
@@ -187,6 +230,79 @@ no change — pull 2 rows = 279, pull 1 rows = 279. New keys (only in pull 2): 0
 The pull-2 CSV is byte-identical to the pull-1 CSV: both SHA-256 5155f6f3f5e36fd943be2f4a02dcbab9151197cf47ce5c9612261d407eef6673 (35,261 bytes each).
 The claims file itself is also unchanged between pulls: SHA-256 37840268c21e5ad3d9c95e22d80835c7e1f810952d6160dd4e7ca054083fb8a3 in both pulls.
 So: pull 2 rows (279) = pull 1 rows (279) + new (0) - gone (0).
+
+## PROOF index (distinct code → request numbers)
+
+Every distinct code looked up, with its request number in each pull. "Finding" marks only code-level verdicts verified from the CSVs (not found, is_noc); "—" means no code-level verdict — see the correction table for that code's line-level findings.
+
+| Code | Table | Pull 1 request | Pull 2 request | Finding |
+|---|---|---:|---:|---|
+| claims file | Synmerco job inputs | 1 | 2 | source file, 279 lines |
+| E11.42 | ICD-10-CM | 3 | 68 | — |
+| E11.65 | ICD-10-CM | 4 | 69 | — |
+| E11.9 | ICD-10-CM | 5 | 70 | — |
+| E11.99 | ICD-10-CM | 6 | 71 | not found |
+| E66.01 | ICD-10-CM | 7 | 72 | — |
+| E78.5 | ICD-10-CM | 8 | 73 | — |
+| E78.50 | ICD-10-CM | 9 | 74 | not found |
+| G20 | ICD-10-CM | 10 | 75 | not found |
+| G47.33 | ICD-10-CM | 11 | 76 | — |
+| G89.29 | ICD-10-CM | 12 | 77 | — |
+| I10 | ICD-10-CM | 13 | 78 | — |
+| I25.1 | ICD-10-CM | 14 | 79 | not found |
+| I50.9 | ICD-10-CM | 15 | 80 | — |
+| I63.9 | ICD-10-CM | 16 | 81 | — |
+| J44.9 | ICD-10-CM | 17 | 82 | — |
+| J45.90 | ICD-10-CM | 18 | 83 | not found |
+| J45.909 | ICD-10-CM | 19 | 84 | — |
+| J96.11 | ICD-10-CM | 20 | 85 | — |
+| L89.152 | ICD-10-CM | 21 | 86 | — |
+| M17.11 | ICD-10-CM | 22 | 87 | — |
+| M17.12 | ICD-10-CM | 23 | 88 | — |
+| M25.561 | ICD-10-CM | 24 | 89 | — |
+| M54.5 | ICD-10-CM | 25 | 90 | not found |
+| M54.50 | ICD-10-CM | 26 | 91 | — |
+| M62.81 | ICD-10-CM | 27 | 92 | — |
+| M81.0 | ICD-10-CM | 28 | 93 | — |
+| N39.0 | ICD-10-CM | 29 | 94 | — |
+| R26.81 | ICD-10-CM | 30 | 95 | — |
+| R5.1 | ICD-10-CM | 31 | 96 | not found |
+| S52.501A | ICD-10-CM | 32 | 97 | — |
+| S82.201 | ICD-10-CM | 33 | 98 | not found |
+| S82.201A | ICD-10-CM | 34 | 99 | — |
+| S93.401A | ICD-10-CM | 35 | 100 | — |
+| Z00.0 | ICD-10-CM | 36 | 101 | not found |
+| Z23 | ICD-10-CM | 37 | 102 | — |
+| Z79.4 | ICD-10-CM | 38 | 103 | — |
+| Z96.651 | ICD-10-CM | 39 | 104 | — |
+| Z99.81 | ICD-10-CM | 40 | 105 | — |
+| A0428 | HCPCS Level II | 41 | 106 | — |
+| A4253 | HCPCS Level II | 42 | 107 | — |
+| A4254 | HCPCS Level II | 43 | 108 | not found |
+| A4259 | HCPCS Level II | 44 | 109 | — |
+| A7030 | HCPCS Level II | 45 | 110 | — |
+| A7034 | HCPCS Level II | 46 | 111 | — |
+| A9270 | HCPCS Level II | 47 | 112 | — |
+| E0100 | HCPCS Level II | 48 | 113 | — |
+| E0114 | HCPCS Level II | 49 | 114 | — |
+| E0115 | HCPCS Level II | 50 | 115 | not found |
+| E0130 | HCPCS Level II | 51 | 116 | — |
+| E0143 | HCPCS Level II | 52 | 117 | — |
+| E0181 | HCPCS Level II | 53 | 118 | — |
+| E0260 | HCPCS Level II | 54 | 119 | — |
+| E0431 | HCPCS Level II | 55 | 120 | — |
+| E0601 | HCPCS Level II | 56 | 121 | — |
+| E0602 | HCPCS Level II | 57 | 122 | — |
+| E1399 | HCPCS Level II | 58 | 123 | is_noc |
+| G0008 | HCPCS Level II | 59 | 124 | — |
+| G0009 | HCPCS Level II | 60 | 125 | — |
+| J1100 | HCPCS Level II | 61 | 126 | — |
+| J3301 | HCPCS Level II | 62 | 127 | is_noc |
+| J3490 | HCPCS Level II | 63 | 128 | is_noc |
+| K0001 | HCPCS Level II | 64 | 129 | — |
+| L1832 | HCPCS Level II | 65 | 130 | — |
+| L3908 | HCPCS Level II | 66 | 131 | — |
+| L3909X | HCPCS Level II | 67 | 132 | not found |
 
 ## PROOF
 
@@ -1390,12 +1506,6 @@ CLM-0001,1,2026-02-18,M-0065,I25.1;Z23,Atherosclerotic heart disease | Encounter
 5155f6f3f5e36fd943be2f4a02dcbab9151197cf47ce5c9612261d407eef6673 claim-code-review-pull1.csv
 5155f6f3f5e36fd943be2f4a02dcbab9151197cf47ce5c9612261d407eef6673 claim-code-review-pull2.csv
 ```
-
-## Data files
-
-- claim-code-review-pull1.csv — 279 rows, 35,261 bytes, SHA-256 5155f6f3f5e36fd943be2f4a02dcbab9151197cf47ce5c9612261d407eef6673 (attached under Rule 25 as D2).
-- claim-code-review-pull2.csv — 279 rows, 35,261 bytes, SHA-256 5155f6f3f5e36fd943be2f4a02dcbab9151197cf47ce5c9612261d407eef6673 (attached under Rule 25 as D3).
-- Both files have exactly the 13 columns the job lists, in the job order, one row per claim line; a value the source leaves empty stays an empty cell.
 
 ## Progress notes (platform record)
 

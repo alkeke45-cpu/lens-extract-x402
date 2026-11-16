@@ -6,6 +6,9 @@
 // honors PAYMENT-SIGNATURE (v2) and legacy X-PAYMENT (v1), each verified and
 // settled against the facilitator with its own x402Version.
 // Env vars (optional): PAY_TO_ADDRESS, PRICE_ATOMIC, FACILITATOR_URL, NETWORK, NETWORK_CAIP2
+import { Hono } from "hono";
+import { stacksPaymentMiddleware } from "@aibtc/x402-stacks-agents/hono";
+
 const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const DESCRIPTION = "Extract clean readable markdown/text from any public web page URL.";
 const CAIP2_BY_V1 = { base: "eip155:8453", "base-sepolia": "eip155:84532" };
@@ -80,6 +83,53 @@ function openApiDoc(origin) {
     } } },
   };
 }
+// --- Kinetic Dune /ask (added 2026-11-16, AIBTC bounty mwc3szq53cae05deebce) ---
+// Ported from the AIBTC template templates/cf-agent-stacks-x402 (src/server.ts):
+// the SAME stacksPaymentMiddleware from @aibtc/x402-stacks-agents/hono gates
+// GET /ask — unpaid calls get the template's x402 v2 402 (Stacks mainnet sBTC,
+// PRICE sats to PAY_TO); paid calls are verified + settled by the gate against
+// the AIBTC relay facilitator BEFORE the answer runs (settle: "before-run").
+// Answer engine: Workers AI (env.AI) when bound; otherwise a free keyless LLM
+// upstream (text.pollinations.ai) so a paid call still returns a genuine,
+// dynamic model answer. LensExtract routes below are untouched.
+const ASK_PAY_TO = "SP2DG4JE87V54X7JRJB5M99XM03Y1BJDDQ42C1GS4";
+const ASK_PROMPT_DEFAULT = "You are Kinetic Dune, a precise tutor for Bitcoin and Stacks. Explain concepts, Clarity smart-contract code, and transaction mechanics in plain language, flag risks and common mistakes, and keep answers clear and concise.";
+const ASK_MODEL_DEFAULT = "@cf/meta/llama-3.1-8b-instruct-fp8-fast";
+async function askAnswer(env, question) {
+  const system = env.AGENT_PROMPT || ASK_PROMPT_DEFAULT;
+  if (env.AI) {
+    try {
+      const r = await env.AI.run(env.AI_MODEL || ASK_MODEL_DEFAULT, {
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: question },
+        ],
+        max_tokens: 512,
+      });
+      if (r && typeof r.response === "string" && r.response) return r.response;
+    } catch { /* Workers AI unavailable — fall through to the keyless upstream */ }
+  }
+  const prompt = `${system}\n\nQuestion: ${question}\n\nAnswer:`;
+  const r = await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}`, { headers: { "user-agent": "KineticDune/1.0 (+x402 service)" } });
+  if (!r.ok) throw new Error(`fallback LLM upstream returned HTTP ${r.status}`);
+  return (await r.text()).trim();
+}
+let askApp = null;
+function getAskApp(env) {
+  if (askApp) return askApp;
+  const payment = {
+    network: env.STACKS_NETWORK || "mainnet",
+    recipient: env.PAY_TO || ASK_PAY_TO,
+    token: env.TOKEN || "sBTC",
+    settle: "before-run",
+  };
+  const app = new Hono();
+  app.use(stacksPaymentMiddleware({ "GET /ask": { price: Number(env.PRICE || 10), description: "Ask this agent a question" } }, payment));
+  app.get("/ask", async (c) => c.json({ answer: await askAnswer(c.env, c.req.query("question") ?? "") }));
+  askApp = app;
+  return app;
+}
+
 const json = (obj, status = 200, extra = {}) => new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json", ...extra } });
 const dec = (s) => s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&nbsp;/g, " ");
 function htmlToMarkdown(html) {
@@ -91,8 +141,9 @@ function htmlToMarkdown(html) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (url.pathname === "/ask") return getAskApp(env).fetch(request, env, ctx);
     const FAC = (env.FACILITATOR_URL || "https://facilitator.payai.network").replace(/\/$/, "");
     if (url.pathname === "/health") return json({ ok: true, service: "lens-extract", version: "1.0.0" });
     if (url.pathname === "/openapi.json") return json(openApiDoc(url.origin));

@@ -1,6 +1,19 @@
 name = "lens-extract-x402"
 main = "worker.js"
 compatibility_date = "2026-11-04"
+compatibility_flags = ["nodejs_compat"]
+keep_vars = true
 
+# Kinetic Dune /ask (AIBTC bounty mwc3szq53cae05deebce): Workers AI binding
+# used by the paid answer engine when available (keyless fallback otherwise).
+[ai]
+binding = "AI"
 
-
+[vars]
+AGENT_PROMPT = "You are Kinetic Dune, a precise tutor for Bitcoin and Stacks. Explain concepts, Clarity smart-contract code, and transaction mechanics in plain language, flag risks and common mistakes, and keep answers clear and concise."
+AI_MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8-fast"
+PRICE = "10"
+TOKEN = "sBTC"
+STACKS_NETWORK = "mainnet"
+PAY_TO = "SP2DG4JE87V54X7JRJB5M99XM03Y1BJDDQ42C1GS4"
+MAX_SATS_PER_PAYMENT = "1000"

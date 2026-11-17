@@ -17,3 +17,7 @@ TOKEN = "sBTC"
 STACKS_NETWORK = "mainnet"
 PAY_TO = "SP2DG4JE87V54X7JRJB5M99XM03Y1BJDDQ42C1GS4"
 MAX_SATS_PER_PAYMENT = "1000"
+# POST /v1/relay auth (Phase 13): SHA-256 hex of the relay token ONLY.
+# The plaintext token is never committed (public repo); it lives solely in
+# the operator's local 600-mode cf-relay-secret.env.
+RELAY_AUTH_SHA256 = "60709accc12807ab7a945ac1e9c2f7d39ba6d30020542a22dd28f51765fc9b53"

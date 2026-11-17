@@ -140,9 +140,61 @@ function htmlToMarkdown(html) {
   return { title, markdown: dec(h).replace(/[ \t]+/g, " ").replace(/\n\s*\n\s*\n+/g, "\n\n").trim() };
 }
 
+// --- Authenticated HTTP relay (added 2026-11-17, Phase 13) ---
+// POST /v1/relay — lets our own tooling reach public data APIs that block
+// this VM's datacenter egress IP, fetching instead from Cloudflare's edge.
+// Auth: the caller presents the relay token in the X-Relay-Auth header; only
+// its SHA-256 hex is configured on the Worker (env.RELAY_AUTH_SHA256, in
+// wrangler.toml [vars]) — the plaintext token lives solely in a local
+// 600-mode secret file and is never committed (this repo is public).
+// Body: {"url": "https://...", "method": "GET|POST", "headers": {...}, "body": "..."}
+// Returns: {"status": int, "headers": {...}, "body": text (<= 200000 chars), "truncated": bool}
+const RELAY_MAX_BODY = 200000;
+async function sha256Hex(s) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+function timingSafeEqualStr(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+async function handleRelay(request, env) {
+  const expected = env.RELAY_AUTH_SHA256;
+  if (!expected) return json({ error: "relay not configured" }, 500);
+  const presentedHash = await sha256Hex(request.headers.get("x-relay-auth") || "");
+  if (!timingSafeEqualStr(presentedHash, String(expected).toLowerCase())) return json({ error: "unauthorized" }, 401);
+  let input;
+  try { input = await request.json(); } catch { return json({ error: "body must be JSON" }, 400); }
+  const target = input && input.url;
+  if (typeof target !== "string" || !/^https:\/\//i.test(target)) return json({ error: "url must be an https URL" }, 400);
+  const method = String(input.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "POST") return json({ error: "method must be GET or POST" }, 400);
+  const headers = {};
+  if (input.headers && typeof input.headers === "object") {
+    for (const [k, v] of Object.entries(input.headers)) {
+      if (typeof v === "string" && !/^(host|content-length)$/i.test(k)) headers[k] = v;
+    }
+  }
+  if (!headers["user-agent"]) headers["user-agent"] = "LensExtract-Relay/1.0 (+x402 service)";
+  const init = { method, headers, redirect: "follow" };
+  if (method === "POST" && typeof input.body === "string") init.body = input.body;
+  let r;
+  try { r = await fetch(target, init); } catch (e) { return json({ error: `relay fetch failed: ${e.message}` }, 502); }
+  const text = await r.text();
+  const outHeaders = {};
+  r.headers.forEach((v, k) => { outHeaders[k] = v; });
+  return json({ status: r.status, headers: outHeaders, body: text.slice(0, RELAY_MAX_BODY), truncated: text.length > RELAY_MAX_BODY });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (url.pathname === "/v1/relay") {
+      if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
+      return handleRelay(request, env);
+    }
     if (url.pathname === "/ask") return getAskApp(env).fetch(request, env, ctx);
     const FAC = (env.FACILITATOR_URL || "https://facilitator.payai.network").replace(/\/$/, "");
     if (url.pathname === "/health") return json({ ok: true, service: "lens-extract", version: "1.0.0" });

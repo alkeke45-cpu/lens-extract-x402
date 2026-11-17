@@ -21,3 +21,16 @@ MAX_SATS_PER_PAYMENT = "1000"
 # The plaintext token is never committed (public repo); it lives solely in
 # the operator's local 600-mode cf-relay-secret.env.
 RELAY_AUTH_SHA256 = "60709accc12807ab7a945ac1e9c2f7d39ba6d30020542a22dd28f51765fc9b53"
+
+# RegionalRelay Durable Object (Phase 16): /v1/relay routes fetch specs
+# through a DO obtained with a locationHint when a region is requested.
+# SQLite-backed class (free-tier compatible). The hint guides object
+# placement only; it does not guarantee the fetch's egress region, and
+# worker.js falls back to a direct fetch on any DO error.
+[[durable_objects.bindings]]
+name = "REGIONAL_RELAY"
+class_name = "RegionalRelay"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RegionalRelay"]

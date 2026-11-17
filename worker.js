@@ -140,16 +140,36 @@ function htmlToMarkdown(html) {
   return { title, markdown: dec(h).replace(/[ \t]+/g, " ").replace(/\n\s*\n\s*\n+/g, "\n\n").trim() };
 }
 
-// --- Authenticated HTTP relay (added 2026-11-17, Phase 13) ---
+// --- Authenticated HTTP relay (added 2026-11-17, Phase 13; upgraded Phase 16) ---
 // POST /v1/relay — lets our own tooling reach public data APIs that block
 // this VM's datacenter egress IP, fetching instead from Cloudflare's edge.
 // Auth: the caller presents the relay token in the X-Relay-Auth header; only
 // its SHA-256 hex is configured on the Worker (env.RELAY_AUTH_SHA256, in
 // wrangler.toml [vars]) — the plaintext token lives solely in a local
 // 600-mode secret file and is never committed (this repo is public).
-// Body: {"url": "https://...", "method": "GET|POST", "headers": {...}, "body": "..."}
-// Returns: {"status": int, "headers": {...}, "body": text (<= 200000 chars), "truncated": bool}
-const RELAY_MAX_BODY = 200000;
+// Body: {"url": "https://...", "method": "GET|POST", "headers": {...},
+//        "body": "...", "body_base64": "...", "region": "weur|eeur|apac|wnam|enam",
+//        "follow_redirects": bool (default true)}
+// Returns: {"ok": bool, "status": int, "final_url": str, "colo": str|null,
+//           "headers": {...}, "body_base64": str (<= 2 MB of body bytes),
+//           "content_type": str|null, "worker_colo": str|null,
+//           "region"?: str, "region_fallback"?: true, "region_error"?: str,
+//           "truncated"?: true, "body": legacy text body (textual types only)}
+// Colo semantics (precise): "worker_colo" is request.cf.colo of the INBOUND
+// request to this Worker — the colo that served the relay call itself.
+// "colo" is parsed from the cf-ray header of the OUTBOUND target response
+// (present only when the target itself sits behind Cloudflare); it is the
+// target response's colo, NOT proof of where our fetch executed.
+// Region routing: when a valid region is given and the REGIONAL_RELAY
+// Durable Object binding exists, the fetch spec is POSTed to a Durable
+// Object obtained with { locationHint: region }. A locationHint is a HINT
+// to the platform about where to place the object — it is NOT a guarantee
+// that the outbound fetch egresses from that region. On ANY failure the
+// handler falls back to a direct fetch from the Worker and reports
+// "region_fallback": true with the error message.
+const RELAY_MAX_BYTES = 2 * 1024 * 1024; // 2 MB response-body cap (Phase 16)
+const RELAY_LEGACY_BODY_CHARS = 200000; // legacy text "body" field cap
+const RELAY_REGIONS = ["weur", "eeur", "apac", "wnam", "enam"];
 async function sha256Hex(s) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -159,6 +179,79 @@ function timingSafeEqualStr(a, b) {
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
+}
+function arrayBufferToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
+}
+function base64ToBytes(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+// Performs one relay fetch per the spec and returns the result envelope
+// (without "ok"). Shared by the direct Worker path and the RegionalRelay
+// Durable Object, so both execute byte-identical fetch logic.
+async function performRelayFetch(spec) {
+  const headers = {};
+  if (spec.headers && typeof spec.headers === "object") {
+    for (const [k, v] of Object.entries(spec.headers)) {
+      if (typeof v === "string" && !/^(host|content-length)$/i.test(k)) headers[k] = v;
+    }
+  }
+  if (!headers["user-agent"]) headers["user-agent"] = "LensExtract-Relay/1.0 (+x402 service)";
+  const init = { method: spec.method, headers, redirect: spec.follow_redirects === false ? "manual" : "follow" };
+  if (spec.method === "POST") {
+    if (typeof spec.body_base64 === "string" && spec.body_base64) init.body = base64ToBytes(spec.body_base64);
+    else if (typeof spec.body === "string") init.body = spec.body;
+  }
+  const r = await fetch(spec.url, init);
+  const buf = await r.arrayBuffer();
+  const truncated = buf.byteLength > RELAY_MAX_BYTES;
+  const slice = truncated ? buf.slice(0, RELAY_MAX_BYTES) : buf;
+  const outHeaders = {};
+  r.headers.forEach((v, k) => { outHeaders[k] = v; });
+  let colo = null;
+  const ray = r.headers.get("cf-ray");
+  if (ray && ray.includes("-")) colo = ray.split("-").pop();
+  const result = {
+    status: r.status,
+    final_url: r.url,
+    colo,
+    headers: outHeaders,
+    body_base64: arrayBufferToBase64(slice),
+    content_type: r.headers.get("content-type") || null,
+  };
+  if (truncated) result.truncated = true;
+  return result;
+}
+// RegionalRelay Durable Object (Phase 16): receives a relay fetch spec over
+// POST and performs the fetch from inside the Durable Object. The handler
+// obtains the stub with { locationHint: region } so the platform places the
+// object near the requested region; per the note above, the hint is not a
+// guarantee of the fetch's egress location.
+export class RegionalRelay {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+  }
+  async fetch(request) {
+    let spec;
+    try { spec = await request.json(); } catch { return json({ ok: false, error: "body must be JSON" }, 400); }
+    if (!spec || typeof spec.url !== "string" || !/^https:\/\//i.test(spec.url)) return json({ ok: false, error: "url must be an https URL" }, 400);
+    try {
+      const result = await performRelayFetch(spec);
+      return json({ ok: true, ...result });
+    } catch (e) {
+      return json({ ok: false, error: `relay fetch failed: ${e.message}` }, 502);
+    }
+  }
 }
 async function handleRelay(request, env) {
   const expected = env.RELAY_AUTH_SHA256;
@@ -171,21 +264,65 @@ async function handleRelay(request, env) {
   if (typeof target !== "string" || !/^https:\/\//i.test(target)) return json({ error: "url must be an https URL" }, 400);
   const method = String(input.method || "GET").toUpperCase();
   if (method !== "GET" && method !== "POST") return json({ error: "method must be GET or POST" }, 400);
-  const headers = {};
-  if (input.headers && typeof input.headers === "object") {
-    for (const [k, v] of Object.entries(input.headers)) {
-      if (typeof v === "string" && !/^(host|content-length)$/i.test(k)) headers[k] = v;
+  const spec = {
+    url: target,
+    method,
+    headers: input.headers && typeof input.headers === "object" ? input.headers : {},
+    body: typeof input.body === "string" ? input.body : undefined,
+    body_base64: typeof input.body_base64 === "string" ? input.body_base64 : undefined,
+    follow_redirects: input.follow_redirects !== false,
+  };
+  const workerColo = request.cf && request.cf.colo ? request.cf.colo : null;
+  const region = typeof input.region === "string" ? input.region.toLowerCase() : null;
+  let result = null;
+  let regionFallback = false;
+  let regionError = null;
+  if (region && RELAY_REGIONS.includes(region)) {
+    if (env.REGIONAL_RELAY) {
+      try {
+        const stub = env.REGIONAL_RELAY.get(env.REGIONAL_RELAY.idFromName(`relay-${region}`), { locationHint: region });
+        const doResp = await stub.fetch("https://regional-relay.internal/fetch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(spec),
+        });
+        const doJson = await doResp.json().catch(() => null);
+        if (!doResp.ok || !doJson || doJson.ok !== true) {
+          throw new Error((doJson && doJson.error) || `RegionalRelay returned HTTP ${doResp.status}`);
+        }
+        result = doJson;
+      } catch (e) {
+        regionFallback = true;
+        regionError = e.message;
+      }
+    } else {
+      regionFallback = true;
+      regionError = "REGIONAL_RELAY binding not available";
     }
   }
-  if (!headers["user-agent"]) headers["user-agent"] = "LensExtract-Relay/1.0 (+x402 service)";
-  const init = { method, headers, redirect: "follow" };
-  if (method === "POST" && typeof input.body === "string") init.body = input.body;
-  let r;
-  try { r = await fetch(target, init); } catch (e) { return json({ error: `relay fetch failed: ${e.message}` }, 502); }
-  const text = await r.text();
-  const outHeaders = {};
-  r.headers.forEach((v, k) => { outHeaders[k] = v; });
-  return json({ status: r.status, headers: outHeaders, body: text.slice(0, RELAY_MAX_BODY), truncated: text.length > RELAY_MAX_BODY });
+  if (!result) {
+    try {
+      result = { ok: true, ...(await performRelayFetch(spec)) };
+    } catch (e) {
+      return json({ ok: false, error: `relay fetch failed: ${e.message}` }, 502);
+    }
+  }
+  const out = { ...result, worker_colo: workerColo };
+  if (region) {
+    out.region = region;
+    if (regionFallback) {
+      out.region_fallback = true;
+      out.region_error = regionError;
+    }
+  }
+  // Legacy text "body" for Phase 13/14 consumers, textual content only.
+  if (typeof out.body_base64 === "string" && (!out.content_type || /^(text\/|application\/(json|xml|javascript|x-www-form-urlencoded)|image\/svg)/i.test(out.content_type))) {
+    try {
+      const bytes = base64ToBytes(out.body_base64);
+      out.body = new TextDecoder("utf-8", { fatal: false }).decode(bytes).slice(0, RELAY_LEGACY_BODY_CHARS);
+    } catch { /* leave body unset on decode failure */ }
+  }
+  return json(out);
 }
 
 export default {

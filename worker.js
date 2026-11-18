@@ -287,7 +287,7 @@ async function performRelayFetch(spec) {
   }
   if (!headers["user-agent"]) headers["user-agent"] = "LensExtract-Relay/1.0 (+x402 service)";
   const init = { method: spec.method, headers, redirect: spec.follow_redirects === false ? "manual" : "follow" };
-  if (spec.method === "POST") {
+  if (spec.method !== "GET" && spec.method !== "HEAD") {
     if (typeof spec.body_base64 === "string" && spec.body_base64) init.body = base64ToBytes(spec.body_base64);
     else if (typeof spec.body === "string") init.body = spec.body;
   }
@@ -343,7 +343,7 @@ async function handleRelay(request, env) {
   const target = input && input.url;
   if (typeof target !== "string" || !/^https:\/\//i.test(target)) return json({ error: "url must be an https URL" }, 400);
   const method = String(input.method || "GET").toUpperCase();
-  if (method !== "GET" && method !== "POST") return json({ error: "method must be GET or POST" }, 400);
+  if (!["GET", "POST", "PUT", "PATCH", "DELETE"].includes(method)) return json({ error: "method must be GET, POST, PUT, PATCH or DELETE" }, 400);
   const spec = {
     url: target,
     method,

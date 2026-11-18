@@ -68,7 +68,7 @@ function bazaarExtension() {
   };
 }
 function openApiDoc(origin) {
-  return {
+  const doc = {
     openapi: "3.1.0",
     info: { title: "LensExtract", version: "1.0.0", description: "Extract clean readable markdown/text from any public web page URL.", "x-guidance": "Use POST /v1/extract to extract clean markdown from a public web page. Send a JSON body with a 'url' field (required) and optional 'maxChars'. Payment is x402 v2: $0.001 USDC on Base per call; call without payment to receive the 402 payment requirements in the PAYMENT-REQUIRED header, then retry with a PAYMENT-SIGNATURE header. (Legacy x402 v1 X-PAYMENT headers are also accepted.)", contact: { email: "alkeke45@gmail.com" } },
     servers: [{ url: origin }],
@@ -149,6 +149,13 @@ function openApiDoc(origin) {
       },
     } } },
   };
+  // x402scan's registry validator requires an explicit input schema on every
+  // operation (even GETs): inject a default requestBody wherever one is
+  // missing so register-origin validation passes for all paid routes.
+  for (const ops of Object.values(doc.paths)) for (const op of Object.values(ops)) {
+    if (op && typeof op === "object" && !op.requestBody) op.requestBody = { required: false, content: { "application/json": { schema: { type: "object", description: "Inputs are taken from the query string or JSON body as documented in the operation summary and parameters; routes without parameters take no input." } } } };
+  }
+  return doc;
 }
 // --- Kinetic Dune /ask (added 2026-11-16, AIBTC bounty mwc3szq53cae05deebce) ---
 // Ported from the AIBTC template templates/cf-agent-stacks-x402 (src/server.ts):

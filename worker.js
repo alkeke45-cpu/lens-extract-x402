@@ -149,11 +149,17 @@ function openApiDoc(origin) {
       },
     } } },
   };
-  // x402scan's registry validator requires an explicit input schema on every
-  // operation (even GETs): inject a default requestBody wherever one is
-  // missing so register-origin validation passes for all paid routes.
+  // x402scan's registry validator requires an explicit input schema (a
+  // requestBody whose schema declares properties) and an output schema on
+  // every operation, even GETs: inject defaults wherever they are missing.
+  // The declared "input" property is truthful: every paid route here accepts
+  // an optional JSON body / query inputs (documented per operation in its
+  // summary and parameters) and ignores fields it does not use.
   for (const ops of Object.values(doc.paths)) for (const op of Object.values(ops)) {
-    if (op && typeof op === "object" && !op.requestBody) op.requestBody = { required: false, content: { "application/json": { schema: { type: "object", description: "Inputs are taken from the query string or JSON body as documented in the operation summary and parameters; routes without parameters take no input." } } } };
+    if (!op || typeof op !== "object") continue;
+    if (!op.requestBody) op.requestBody = { required: false, content: { "application/json": { schema: { type: "object", properties: { input: { type: "object", additionalProperties: true, description: "Optional inputs. Parameterized routes take their documented query/JSON inputs (see parameters and summary); routes without parameters take no required input." } } } } } };
+    const ok = op.responses && op.responses["200"];
+    if (ok && !ok.content) ok.content = { "application/json": { schema: { type: "object", description: "JSON product payload; every payload carries product, source and fetchedAt/generatedAt fields." } } };
   }
   return doc;
 }

@@ -97,6 +97,49 @@ function openApiDoc(origin) {
         "402": { description: "Payment Required" },
       },
     } },
+    "/v1/base-gas-and-sequencer": { get: {
+      operationId: "baseGasAndSequencer", summary: "Live Base gas price, block base fee/utilization, L1 blob fee and fee-history estimate", tags: ["Data"],
+      "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.005000" }, protocols: [{ x402: {} }] },
+      responses: { "200": { description: "Successful response" }, "402": { description: "Payment Required" } },
+    } },
+    "/v1/defi-yield-radar": { get: {
+      operationId: "defiYieldRadar", summary: "Top 20 USDC yields on Base & Arbitrum by APY (DeFiLlama, live)", tags: ["Finance"],
+      "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.010000" }, protocols: [{ x402: {} }] },
+      responses: { "200": { description: "Successful response" }, "402": { description: "Payment Required" } },
+    } },
+    "/v1/token-contract-guard": { get: {
+      operationId: "tokenContractGuard", summary: "Heuristic Base ERC-20 screen: bytecode, EIP-1967 proxy, standard views (heuristics only, not a guarantee)", tags: ["Security"],
+      "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.010000" }, protocols: [{ x402: {} }] },
+      parameters: [{ name: "address", in: "query", required: true, schema: { type: "string" }, description: "Base token contract address (0x...)" }],
+      responses: { "200": { description: "Successful response" }, "402": { description: "Payment Required" } },
+    } },
+    "/v1/crypto-momentum-signals": { get: {
+      operationId: "cryptoMomentumSignals", summary: "BTC/ETH/SOL descriptive momentum stats: price, 7d change, RSI(14), 30d realized volatility (Kraken, live)", tags: ["Finance"],
+      "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.010000" }, protocols: [{ x402: {} }] },
+      responses: { "200": { description: "Successful response" }, "402": { description: "Payment Required" } },
+    } },
+    "/v1/stablecoin-peg-monitor": { get: {
+      operationId: "stablecoinPegMonitor", summary: "Major USD stablecoin prices and deviation from $1 in bps (DeFiLlama, live)", tags: ["Finance"],
+      "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.005000" }, protocols: [{ x402: {} }] },
+      responses: { "200": { description: "Successful response" }, "402": { description: "Payment Required" } },
+    } },
+    "/v1/fear-greed": { get: {
+      operationId: "fearGreed", summary: "Crypto Fear & Greed index: current value/classification + 30d history (alternative.me, live)", tags: ["Finance"],
+      "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.005000" }, protocols: [{ x402: {} }] },
+      responses: { "200": { description: "Successful response" }, "402": { description: "Payment Required" } },
+    } },
+    "/v1/base-wallet-scan": { get: {
+      operationId: "baseWalletScan", summary: "Base address scan: ETH balance, tx count, contract flag, USDC/WETH/DAI/cbBTC/AERO/USDbC balances (live RPC)", tags: ["Data"],
+      "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.010000" }, protocols: [{ x402: {} }] },
+      parameters: [{ name: "address", in: "query", required: true, schema: { type: "string" }, description: "Base address to scan (0x...)" }],
+      responses: { "200": { description: "Successful response" }, "402": { description: "Payment Required" } },
+    } },
+    "/v1/ens-lookup": { get: {
+      operationId: "ensLookup", summary: "ENS forward/reverse resolution via ensideas (?name=vitalik.eth or ?address=0x...)", tags: ["Data"],
+      "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.005000" }, protocols: [{ x402: {} }] },
+      parameters: [{ name: "name", in: "query", schema: { type: "string" } }, { name: "address", in: "query", schema: { type: "string" } }],
+      responses: { "200": { description: "Successful response" }, "402": { description: "Payment Required" } },
+    } },
     "/ask": { get: {
       operationId: "ask", summary: "Ask Kinetic Dune a question (x402 on Stacks: 10 sats sBTC per answer; not a Base USDC route)", tags: ["AI"],
       parameters: [{ name: "question", in: "query", required: true, schema: { type: "string" } }],
@@ -452,6 +495,248 @@ async function handlePaidJson(request, env, url, cfg, produce) {
   return json(product, 200, receiptHeaders);
 }
 
+// --- Data endpoints pack (added 2026-11-18, Phase 21 task 2.1 remainder) ---
+// Eight more Base-USDC x402 routes paying the work wallet, all serving REAL
+// data fetched live at request time from free public APIs/RPCs (sources and
+// fetch timestamps are labelled inside every payload; nothing is fabricated).
+// Same payment pattern as the Morpho routes: handlePaidJson (PayAI facilitator
+// verify/settle, produce-before-settle, x402 v2 primary + v1 accepted).
+const GAS_PRICE_ATOMIC = "5000"; // $0.005
+const YIELD_PRICE_ATOMIC = "10000"; // $0.01
+const GUARD_PRICE_ATOMIC = "10000"; // $0.01
+const MOMENTUM_PRICE_ATOMIC = "10000"; // $0.01
+const PEG_PRICE_ATOMIC = "5000"; // $0.005
+const FNG_PRICE_ATOMIC = "5000"; // $0.005
+const WALLET_PRICE_ATOMIC = "10000"; // $0.01
+const ENS_PRICE_ATOMIC = "5000"; // $0.005
+const GAS_DESC = "Live Base (eip155:8453) fee snapshot: L2 gas price, latest-block base fee and utilization, L1 blob base fee and a fee-history estimate, fetched live from public Base RPC endpoints at request time.";
+const YIELD_DESC = "Top USDC yields on Base and Arbitrum from the DeFiLlama yields dataset (fetched live at request time): project, pool, TVL and APY for the 20 highest-APY USDC pools with at least $100k TVL.";
+const GUARD_DESC = "Heuristic Base ERC-20 contract screen for ?address=: bytecode presence and size, EIP-1967 proxy detection, standard view decoding (name, symbol, decimals, totalSupply, owner). Heuristics only - not a honeypot simulation and not a safety guarantee.";
+const MOMENTUM_DESC = "Descriptive momentum statistics for BTC, ETH and SOL from Kraken daily candles (fetched live at request time): last price, 7-day change, RSI(14) and 30-day annualized realized volatility. Statistics only, not financial advice.";
+const PEG_DESC = "Stablecoin peg monitor: live prices and deviation from $1 in basis points for major USD stablecoins (USDT, USDC, DAI, FDUSD, USDe, PYUSD, TUSD, FRAX) from the DeFiLlama stablecoin price feed, fetched live at request time.";
+const FNG_DESC = "Crypto Fear & Greed index from alternative.me: current value and classification plus 30 days of history, fetched live at request time.";
+const WALLET_DESC = "Base wallet scan for ?address=: native ETH balance, transaction count, contract flag, and balances of USDC, WETH, DAI, cbBTC, AERO and USDbC, read live from public Base RPC endpoints.";
+const ENS_DESC = "ENS resolution via the free ensideas API: forward-resolve a .eth name (?name=) to its address, avatar and display name, or reverse-resolve an address (?address=) to its primary ENS name.";
+const BASE_RPCS = ["https://mainnet.base.org", "https://base-rpc.publicnode.com", "https://base.llamarpc.com", "https://base.drpc.org"];
+async function rpcCall(method, params) {
+  let lastErr = null;
+  for (const rpc of BASE_RPCS) {
+    try {
+      const r = await fetch(rpc, { method: "POST", headers: { "content-type": "application/json", "user-agent": "LensExtract-DataPack/1.0 (+x402 service)" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+      if (!r.ok) { lastErr = new Error(`${rpc} HTTP ${r.status}`); continue; }
+      const j = await r.json();
+      if (j.error) { lastErr = new Error(`${rpc} ${method}: ${j.error.message || JSON.stringify(j.error)}`); continue; }
+      return { result: j.result, rpc };
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error("all Base RPC endpoints failed");
+}
+const hexToBig = (h) => (h == null || h === "0x" ? 0n : BigInt(h));
+function formatUnits(v, decimals) {
+  const neg = v < 0n; const s = (neg ? -v : v).toString().padStart(decimals + 1, "0");
+  const whole = s.slice(0, s.length - decimals); const frac = decimals ? s.slice(s.length - decimals).replace(/0+$/, "") : "";
+  return (neg ? "-" : "") + whole + (frac ? "." + frac : "");
+}
+function decodeAbiString(hex) {
+  if (!hex || hex === "0x" || hex.length < 130) return null;
+  try {
+    const len = Number(BigInt("0x" + hex.slice(66, 130)));
+    const bytes = [];
+    for (let i = 0; i < len; i++) bytes.push(parseInt(hex.slice(130 + i * 2, 132 + i * 2), 16));
+    return new TextDecoder().decode(new Uint8Array(bytes));
+  } catch { return null; }
+}
+const nowIso = () => new Date().toISOString();
+async function baseGasProduct() {
+  const [gp, bn, blob, fh] = await Promise.allSettled([rpcCall("eth_gasPrice", []), rpcCall("eth_blockNumber", []), rpcCall("eth_blobBaseFee", []), rpcCall("eth_feeHistory", ["0x5", "latest", []])] );
+  if (gp.status !== "fulfilled" && bn.status !== "fulfilled") throw new Error("Base RPC unreachable for gas data");
+  let block = null;
+  if (bn.status === "fulfilled") {
+    const b = await rpcCall("eth_getBlockByNumber", [bn.value.result, false]).catch(() => null);
+    if (b && b.result) block = { number: Number(hexToBig(b.result.number)), timestamp: Number(hexToBig(b.result.timestamp)), baseFeePerGasWei: hexToBig(b.result.baseFeePerGas || "0x0").toString(), gasUsed: Number(hexToBig(b.result.gasUsed)), gasLimit: Number(hexToBig(b.result.gasLimit)), utilization: b.result.gasLimit ? Number(hexToBig(b.result.gasUsed)) / Number(hexToBig(b.result.gasLimit)) : null };
+  }
+  const gasPriceWei = gp.status === "fulfilled" ? hexToBig(gp.value.result) : null;
+  return {
+    product: "Base Gas & Sequencer Fee Snapshot", chain: "Base", chainId: 8453, network: "eip155:8453", fetchedAt: nowIso(),
+    source: "Public Base JSON-RPC endpoints (eth_gasPrice, eth_blockNumber, eth_getBlockByNumber, eth_blobBaseFee, eth_feeHistory) queried at request time",
+    rpcUsed: (gp.status === "fulfilled" ? gp.value.rpc : bn.status === "fulfilled" ? bn.value.rpc : null),
+    gasPriceWei: gasPriceWei ? gasPriceWei.toString() : null, gasPriceGwei: gasPriceWei ? Number(gasPriceWei) / 1e9 : null,
+    latestBlock: block,
+    l1BlobBaseFeeWei: blob.status === "fulfilled" ? hexToBig(blob.value.result).toString() : null,
+    l1BlobBaseFeeNote: blob.status === "fulfilled" ? "L1 blob base fee (eth_blobBaseFee) - the data-availability component every Base transaction pays toward Ethereum L1." : "eth_blobBaseFee not answered by the responding RPC endpoint at fetch time; value omitted rather than estimated.",
+    feeHistory: fh.status === "fulfilled" ? { oldestBlock: Number(hexToBig(fh.value.result.oldestBlock)), baseFeePerGasWei: (fh.value.result.baseFeePerGas || []).map((x) => hexToBig(x).toString()), baseFeePerBlobGasWei: (fh.value.result.baseFeePerBlobGas || []).map((x) => hexToBig(x).toString()) } : null,
+    sequencerNote: "Base is operated by a single sequencer (Coinbase). L2 execution fees follow the EIP-1559 base fee of the latest block; every transaction additionally pays an L1 data fee driven by the blob base fee above.",
+  };
+}
+function extractChainPools(text, chains) {
+  const out = [];
+  for (const chain of chains) {
+    const needle = `{"chain":"${chain}"`;
+    let i = 0;
+    while ((i = text.indexOf(needle, i)) !== -1) {
+      let depth = 0, inStr = false, esc = false, j = i;
+      for (; j < text.length; j++) {
+        const c = text[j];
+        if (inStr) { if (esc) esc = false; else if (c === "\\") esc = true; else if (c === '"') inStr = false; }
+        else if (c === '"') inStr = true;
+        else if (c === "{") depth++;
+        else if (c === "}") { depth--; if (depth === 0) { j++; break; } }
+      }
+      try { out.push(JSON.parse(text.slice(i, j))); } catch {}
+      i = j;
+    }
+  }
+  return out;
+}
+async function yieldRadarProduct() {
+  const r = await fetch("https://yields.llama.fi/pools", { headers: { "user-agent": "LensExtract-YieldRadar/1.0 (+x402 service)" } });
+  if (!r.ok) throw new Error(`DeFiLlama yields API HTTP ${r.status}`);
+  const text = await r.text();
+  let pools = extractChainPools(text, ["Base", "Arbitrum"]);
+  if (!pools.length) { const j = JSON.parse(text); pools = (j.data || []).filter((p) => p.chain === "Base" || p.chain === "Arbitrum"); }
+  const usdc = pools.filter((p) => /(^|[-/\s])USDC($|[-/\s])/i.test(p.symbol || "") && (p.tvlUsd || 0) >= 100000 && p.apy != null && p.apy > 0 && !p.outlier);
+  usdc.sort((a, b) => b.apy - a.apy);
+  return {
+    product: "DeFi Yield Radar - Top USDC Yields (Base & Arbitrum)", fetchedAt: nowIso(),
+    source: "DeFiLlama yields API (https://yields.llama.fi/pools), fetched live at request time",
+    methodology: "Pools on Base/Arbitrum whose symbol contains a USDC leg, TVL >= $100,000, positive APY, DeFiLlama outlier flag off; ranked by total APY descending; top 20 returned.",
+    candidatesScanned: pools.length, usdcPoolsMatched: usdc.length, count: Math.min(20, usdc.length),
+    pools: usdc.slice(0, 20).map((p) => ({ chain: p.chain, project: p.project, symbol: p.symbol, tvlUsd: p.tvlUsd, apy: p.apy, apyBase: p.apyBase, apyReward: p.apyReward, apyMean30d: p.apyMean30d, stablecoin: p.stablecoin, pool: p.pool, underlyingTokens: p.underlyingTokens })),
+    disclaimer: "APY figures are DeFiLlama's trailing values at fetch time and change continuously; high APY usually reflects reward emissions or elevated risk. Data only, not financial advice.",
+  };
+}
+async function tokenGuardProduct(address) {
+  if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) throw new Error("missing or invalid ?address= (expected a 0x-prefixed 20-byte Base address)");
+  const addr = address.toLowerCase();
+  const call = (data) => rpcCall("eth_call", [{ to: addr, data }, "latest"]).then((x) => x.result).catch(() => null);
+  const [code, impl, name, symbol, decimals, totalSupply, owner] = await Promise.all([
+    rpcCall("eth_getCode", [addr, "latest"]).then((x) => x.result).catch(() => null),
+    rpcCall("eth_getStorageAt", [addr, "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc", "latest"]).then((x) => x.result).catch(() => null),
+    call("0x06fdde03"), call("0x95d89b41"), call("0x313ce567"), call("0x18160ddd"), call("0x8da5cb5b"),
+  ]);
+  if (code == null) throw new Error("Base RPC unreachable for eth_getCode");
+  const hasCode = code !== "0x";
+  const implAddr = impl && impl !== "0x" && hexToBig(impl) !== 0n ? "0x" + impl.slice(-40) : null;
+  const dec = decimals ? Number(hexToBig(decimals)) : null;
+  const checks = [];
+  checks.push({ check: "bytecode_present", status: hasCode ? "pass" : "fail", detail: hasCode ? `Contract bytecode present (${(code.length - 2) / 2} bytes).` : "No bytecode at this address on Base - it is an EOA or an undeployed address, not a token contract." });
+  checks.push({ check: "eip1967_proxy", status: implAddr ? "warn" : "info", detail: implAddr ? `EIP-1967 implementation slot points to ${implAddr}: this is an upgradeable proxy - the logic behind this address can be replaced by whoever controls the proxy admin.` : "EIP-1967 implementation slot is empty: not a standard upgradeable proxy (other proxy patterns are not excluded by this check)." });
+  checks.push({ check: "erc20_views_decodable", status: name && symbol && dec != null ? "pass" : "warn", detail: name && symbol && dec != null ? "name(), symbol() and decimals() all answered and decoded." : "One or more of name()/symbol()/decimals() did not answer or did not decode - non-standard or restricted token interface." });
+  checks.push({ check: "owner_view", status: owner ? "info" : "info", detail: owner && hexToBig(owner) !== 0n ? `owner() answers ${"0x" + owner.slice(-40)}: a privileged owner exists - check what it can do in the verified source.` : "owner() did not answer or returned the zero address." });
+  return {
+    product: "Token Contract Guard - Heuristic Screen", chain: "Base", chainId: 8453, address: addr, fetchedAt: nowIso(),
+    source: "Public Base JSON-RPC endpoints (eth_getCode, eth_getStorageAt, eth_call) queried at request time",
+    token: { name: decodeAbiString(name), symbol: decodeAbiString(symbol), decimals: dec, totalSupplyRaw: totalSupply ? hexToBig(totalSupply).toString() : null },
+    isProxy: !!implAddr, implementation: implAddr, bytecodeBytes: hasCode ? (code.length - 2) / 2 : 0,
+    checks,
+    disclaimer: "HEURISTIC SCREEN ONLY. These are static read-only probes; no buy/sell (honeypot) simulation was performed and transfer taxes, blacklists, mint rights and logic-contract behaviour are NOT evaluated. A clean result is not a safety guarantee - always review the verified contract source before interacting.",
+  };
+}
+async function momentumProduct() {
+  const assets = [{ symbol: "BTC", pair: "XBTUSD" }, { symbol: "ETH", pair: "ETHUSD" }, { symbol: "SOL", pair: "SOLUSD" }];
+  const out = [];
+  for (const a of assets) {
+    const r = await fetch(`https://api.kraken.com/0/public/OHLC?pair=${a.pair}&interval=1440`, { headers: { "user-agent": "LensExtract-Momentum/1.0 (+x402 service)" } });
+    if (!r.ok) throw new Error(`Kraken OHLC HTTP ${r.status} for ${a.pair}`);
+    const j = await r.json();
+    if (j.error && j.error.length) throw new Error(`Kraken error for ${a.pair}: ${j.error.join("; ")}`);
+    const key = Object.keys(j.result).find((k) => k !== "last");
+    const candles = j.result[key];
+    const closes = candles.map((c) => Number(c[4])).filter((n) => n > 0);
+    const use = closes.slice(-45);
+    const last = use[use.length - 1];
+    const prev = use[use.length - 2];
+    const weekAgo = use[use.length - 8];
+    let rsi = null;
+    if (use.length >= 15) {
+      let gains = 0, losses = 0;
+      for (let i = use.length - 14; i < use.length; i++) { const d = use[i] - use[i - 1]; if (d >= 0) gains += d; else losses -= d; }
+      const rs = losses === 0 ? 100 : gains / losses;
+      rsi = Math.round((100 - 100 / (1 + rs)) * 100) / 100;
+    }
+    let vol = null;
+    if (use.length >= 31) {
+      const rets = [];
+      for (let i = use.length - 30; i < use.length; i++) rets.push(Math.log(use[i] / use[i - 1]));
+      const mean = rets.reduce((s, x) => s + x, 0) / rets.length;
+      const sd = Math.sqrt(rets.reduce((s, x) => s + (x - mean) * (x - mean), 0) / rets.length);
+      vol = Math.round(sd * Math.sqrt(365) * 10000) / 100;
+    }
+    out.push({ symbol: a.symbol, pair: a.pair + "/USD (Kraken)", lastPriceUsd: last, change24hPct: prev ? Math.round((last / prev - 1) * 10000) / 100 : null, change7dPct: weekAgo ? Math.round((last / weekAgo - 1) * 10000) / 100 : null, rsi14: rsi, realizedVol30dAnnualizedPct: vol, candlesUsed: use.length });
+  }
+  return { product: "Crypto Momentum Signals - Descriptive Statistics", fetchedAt: nowIso(), source: "Kraken public OHLC API (daily candles), fetched live at request time", assets: out, disclaimer: "Descriptive statistics computed from public daily candles (RSI(14) simple-average method; volatility = stdev of 30 daily log returns, annualized). Statistics only - not financial advice and not a trading signal service." };
+}
+async function pegProduct() {
+  const r = await fetch("https://stablecoins.llama.fi/stablecoinprices", { headers: { "user-agent": "LensExtract-PegMonitor/1.0 (+x402 service)" } });
+  if (!r.ok) throw new Error(`DeFiLlama stablecoin prices HTTP ${r.status}`);
+  const j = await r.json();
+  const latest = Array.isArray(j) ? j[j.length - 1] : null;
+  if (!latest || !latest.prices) throw new Error("unexpected stablecoin price payload");
+  const wanted = [["tether", "USDT"], ["usd-coin", "USDC"], ["dai", "DAI"], ["first-digital-usd", "FDUSD"], ["ethena-usde", "USDe"], ["paypal-usd", "PYUSD"], ["true-usd", "TUSD"], ["frax", "FRAX"]];
+  const coins = wanted.map(([id, symbol]) => {
+    const price = latest.prices[id];
+    if (price == null) return { id, symbol, priceUsd: null, deviationBps: null, status: "no data in feed" };
+    const devBps = Math.round((price - 1) * 10000 * 100) / 100;
+    return { id, symbol, priceUsd: price, deviationBps: devBps, status: Math.abs(devBps) <= 10 ? "at peg" : Math.abs(devBps) <= 50 ? "minor deviation" : "DEPEG WARNING" };
+  });
+  return { product: "Stablecoin Peg Monitor", fetchedAt: nowIso(), source: "DeFiLlama stablecoin price feed (https://stablecoins.llama.fi/stablecoinprices), latest snapshot fetched live at request time", feedTimestamp: latest.date ? new Date(latest.date * 1000).toISOString() : null, coins, note: "Deviation is measured against $1.00. Prices are DeFiLlama's aggregated values; a DEPEG WARNING is a data observation, not a solvency judgement." };
+}
+async function fearGreedProduct() {
+  const r = await fetch("https://api.alternative.me/fng/?limit=31", { headers: { "user-agent": "LensExtract-FearGreed/1.0 (+x402 service)" } });
+  if (!r.ok) throw new Error(`alternative.me FNG HTTP ${r.status}`);
+  const j = await r.json();
+  const data = (j.data || []).map((d) => ({ value: Number(d.value), classification: d.value_classification, date: new Date(Number(d.timestamp) * 1000).toISOString().slice(0, 10) }));
+  if (!data.length) throw new Error("alternative.me returned no FNG data");
+  return { product: "Crypto Fear & Greed Index", fetchedAt: nowIso(), source: "alternative.me Fear & Greed API (https://api.alternative.me/fng/), fetched live at request time", current: data[0], history30d: data.slice(1), note: "Index by alternative.me (0 = extreme fear, 100 = extreme greed), updated daily by the provider." };
+}
+const WALLET_TOKENS = [
+  { symbol: "USDC", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
+  { symbol: "WETH", address: "0x4200000000000000000000000000000000000006", decimals: 18 },
+  { symbol: "DAI", address: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb", decimals: 18 },
+  { symbol: "cbBTC", address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf", decimals: 8 },
+  { symbol: "AERO", address: "0x940181a94A35A4569E4529A3CDfB74e38FD98631", decimals: 18 },
+  { symbol: "USDbC", address: "0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA", decimals: 6 },
+];
+async function walletScanProduct(address) {
+  if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) throw new Error("missing or invalid ?address= (expected a 0x-prefixed 20-byte Base address)");
+  const addr = address.toLowerCase();
+  const balData = "0x70a08231" + addr.slice(2).padStart(64, "0");
+  const [bal, nonce, code, ...tokenBals] = await Promise.all([
+    rpcCall("eth_getBalance", [addr, "latest"]),
+    rpcCall("eth_getTransactionCount", [addr, "latest"]).then((x) => x.result).catch(() => null),
+    rpcCall("eth_getCode", [addr, "latest"]).then((x) => x.result).catch(() => null),
+    ...WALLET_TOKENS.map((t) => rpcCall("eth_call", [{ to: t.address, data: balData }, "latest"]).then((x) => x.result).catch(() => null)),
+  ]);
+  const ethWei = hexToBig(bal.result);
+  return {
+    product: "Base Wallet Scan", chain: "Base", chainId: 8453, address: addr, fetchedAt: nowIso(),
+    source: "Public Base JSON-RPC endpoints (eth_getBalance, eth_getTransactionCount, eth_getCode, ERC-20 balanceOf) queried at request time",
+    rpcUsed: bal.rpc,
+    ethBalanceWei: ethWei.toString(), ethBalance: formatUnits(ethWei, 18),
+    transactionCount: nonce != null ? Number(hexToBig(nonce)) : null,
+    isContract: code != null ? code !== "0x" : null,
+    tokens: WALLET_TOKENS.map((t, i) => ({ symbol: t.symbol, tokenAddress: t.address, balanceRaw: tokenBals[i] != null ? hexToBig(tokenBals[i]).toString() : null, balance: tokenBals[i] != null ? formatUnits(hexToBig(tokenBals[i]), t.decimals) : null })),
+    note: "Balances are live chain state at fetch time on Base only; tokens outside the listed set are not scanned.",
+  };
+}
+async function ensProduct(params) {
+  const q = params.name || params.address || params.q;
+  if (!q) throw new Error("missing parameter: pass ?name=vitalik.eth or ?address=0x...");
+  const r = await fetch(`https://api.ensideas.com/ens/resolve/${encodeURIComponent(q)}`, { headers: { "user-agent": "LensExtract-EnsLookup/1.0 (+x402 service)" } });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j) throw new Error(`ensideas API HTTP ${r.status}`);
+  if (j.error || (!j.address && !j.name)) return { product: "ENS Lookup", query: q, resolved: false, fetchedAt: nowIso(), source: "ensideas API (https://api.ensideas.com)", detail: j.message || "No ENS record resolved for this input." };
+  return { product: "ENS Lookup", query: q, resolved: true, address: j.address || null, name: j.name || null, displayName: j.displayName || null, avatar: j.avatar || null, fetchedAt: nowIso(), source: "ensideas API (https://api.ensideas.com) - free public ENS resolution service" };
+}
+async function inputParams(request, url) {
+  const p = {};
+  for (const [k, v] of url.searchParams) p[k] = v;
+  if (request.method === "POST") {
+    try { const b = await request.clone().json(); if (b && typeof b === "object") for (const k of Object.keys(b)) if (p[k] == null) p[k] = b[k]; } catch {}
+  }
+  return p;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -464,7 +749,7 @@ export default {
     if (url.pathname === "/health") return json({ ok: true, service: "lens-extract", version: "1.0.0" });
     if (url.pathname === "/openapi.json") return json(openApiDoc(url.origin));
     if (url.pathname === "/" || url.pathname === "/.well-known/x402" || url.pathname === "/.well-known/x402.json") {
-      return json({ name: "LensExtract", x402Version: 2, endpoints: [{ method: "POST", path: "/v1/extract", price: "$0.001", network: caip2(env), asset: USDC_BASE, payTo: payTo(env) }, { method: "GET", path: "/v1/morpho-vault-audit", price: "$0.10", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/crypto-alpha-feed", price: "$0.05", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/ask", price: "10 sats", network: "stacks:1", asset: "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token", payTo: ASK_PAY_TO }], legacy: "x402 v1 payments (X-PAYMENT header, network \"base\") are also accepted on the Base USDC routes." });
+      return json({ name: "LensExtract", x402Version: 2, endpoints: [{ method: "POST", path: "/v1/extract", price: "$0.001", network: caip2(env), asset: USDC_BASE, payTo: payTo(env) }, { method: "GET", path: "/v1/morpho-vault-audit", price: "$0.10", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/crypto-alpha-feed", price: "$0.05", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/base-gas-and-sequencer", price: "$0.005", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/defi-yield-radar", price: "$0.01", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/token-contract-guard", price: "$0.01", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/crypto-momentum-signals", price: "$0.01", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/stablecoin-peg-monitor", price: "$0.005", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/fear-greed", price: "$0.005", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/base-wallet-scan", price: "$0.01", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/ens-lookup", price: "$0.005", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/ask", price: "10 sats", network: "stacks:1", asset: "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token", payTo: ASK_PAY_TO }], legacy: "x402 v1 payments (X-PAYMENT header, network \"base\") are also accepted on the Base USDC routes." });
     }
     if (url.pathname === "/v1/extract" && (request.method === "POST" || request.method === "GET")) {
       let input = {};
@@ -515,6 +800,33 @@ export default {
     }
     if (url.pathname === "/v1/crypto-alpha-feed" && (request.method === "GET" || request.method === "POST")) {
       return handlePaidJson(request, env, url, { description: ALPHA_FEED_DESC, priceAtomic: ALPHA_FEED_PRICE, payTo: WORK_WALLET }, alphaFeedProduct);
+    }
+    if (url.pathname === "/v1/base-gas-and-sequencer" && (request.method === "GET" || request.method === "POST")) {
+      return handlePaidJson(request, env, url, { description: GAS_DESC, priceAtomic: GAS_PRICE_ATOMIC, payTo: WORK_WALLET }, baseGasProduct);
+    }
+    if (url.pathname === "/v1/defi-yield-radar" && (request.method === "GET" || request.method === "POST")) {
+      return handlePaidJson(request, env, url, { description: YIELD_DESC, priceAtomic: YIELD_PRICE_ATOMIC, payTo: WORK_WALLET }, yieldRadarProduct);
+    }
+    if (url.pathname === "/v1/token-contract-guard" && (request.method === "GET" || request.method === "POST")) {
+      const p = await inputParams(request, url);
+      return handlePaidJson(request, env, url, { description: GUARD_DESC, priceAtomic: GUARD_PRICE_ATOMIC, payTo: WORK_WALLET }, async () => tokenGuardProduct(p.address));
+    }
+    if (url.pathname === "/v1/crypto-momentum-signals" && (request.method === "GET" || request.method === "POST")) {
+      return handlePaidJson(request, env, url, { description: MOMENTUM_DESC, priceAtomic: MOMENTUM_PRICE_ATOMIC, payTo: WORK_WALLET }, momentumProduct);
+    }
+    if (url.pathname === "/v1/stablecoin-peg-monitor" && (request.method === "GET" || request.method === "POST")) {
+      return handlePaidJson(request, env, url, { description: PEG_DESC, priceAtomic: PEG_PRICE_ATOMIC, payTo: WORK_WALLET }, pegProduct);
+    }
+    if (url.pathname === "/v1/fear-greed" && (request.method === "GET" || request.method === "POST")) {
+      return handlePaidJson(request, env, url, { description: FNG_DESC, priceAtomic: FNG_PRICE_ATOMIC, payTo: WORK_WALLET }, fearGreedProduct);
+    }
+    if (url.pathname === "/v1/base-wallet-scan" && (request.method === "GET" || request.method === "POST")) {
+      const p = await inputParams(request, url);
+      return handlePaidJson(request, env, url, { description: WALLET_DESC, priceAtomic: WALLET_PRICE_ATOMIC, payTo: WORK_WALLET }, async () => walletScanProduct(p.address));
+    }
+    if (url.pathname === "/v1/ens-lookup" && (request.method === "GET" || request.method === "POST")) {
+      const p = await inputParams(request, url);
+      return handlePaidJson(request, env, url, { description: ENS_DESC, priceAtomic: ENS_PRICE_ATOMIC, payTo: WORK_WALLET }, async () => ensProduct(p));
     }
     return json({ error: "not found" }, 404);
   },

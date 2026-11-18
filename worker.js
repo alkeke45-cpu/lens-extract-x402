@@ -479,11 +479,24 @@ function paidReqsV2(priceAtomic, payToAddr) {
 function paidReqsV1(priceAtomic, payToAddr, resource, description) {
   return { scheme: "exact", network: "base", maxAmountRequired: priceAtomic, resource, description, mimeType: "application/json", payTo: payToAddr, maxTimeoutSeconds: 60, asset: USDC_BASE, extra: { name: "USD Coin", version: "2" } };
 }
+function bazaarExt(cfg) {
+  return {
+    info: { input: { type: "http", method: "GET" }, output: { type: "json", example: cfg.outputExample || {} } },
+    schema: {
+      $schema: "https://json-schema.org/draft/2020-12/schema", type: "object",
+      properties: {
+        input: { type: "object", properties: cfg.inputProps || {}, ...(cfg.inputRequired && cfg.inputRequired.length ? { required: cfg.inputRequired } : {}) },
+        output: { type: "object", properties: cfg.outputProps || {} },
+      },
+      required: ["input"],
+    },
+  };
+}
 async function handlePaidJson(request, env, url, cfg, produce) {
   const FAC = (env.FACILITATOR_URL || "https://facilitator.payai.network").replace(/\/$/, "");
   const resource = `${url.origin}${url.pathname}`;
   const need = (error) => {
-    const body = { x402Version: 2, error, resource: { url: resource, description: cfg.description, mimeType: "application/json" }, accepts: [paidReqsV2(cfg.priceAtomic, cfg.payTo)] };
+    const body = { x402Version: 2, error, resource: { url: resource, description: cfg.description, mimeType: "application/json" }, accepts: [paidReqsV2(cfg.priceAtomic, cfg.payTo)], extensions: { bazaar: bazaarExt(cfg) } };
     return json(body, 402, { "payment-required": btoa(JSON.stringify(body)) });
   };
   const sigHeader = request.headers.get("payment-signature");
@@ -809,37 +822,37 @@ export default {
       return json({ url: input.url, finalUrl: r.url, title, markdown: clipped, text: clipped, wordCount: clipped.split(/\s+/).filter(Boolean).length, truncated: markdown.length > maxChars }, 200, receiptHeaders);
     }
     if (url.pathname === "/v1/morpho-vault-audit" && (request.method === "GET" || request.method === "POST")) {
-      return handlePaidJson(request, env, url, { description: MORPHO_AUDIT_DESC, priceAtomic: MORPHO_AUDIT_PRICE, payTo: WORK_WALLET }, async () => morphoAuditProduct());
+      return handlePaidJson(request, env, url, { description: MORPHO_AUDIT_DESC, priceAtomic: MORPHO_AUDIT_PRICE, payTo: WORK_WALLET, inputProps: {}, outputProps: { product: { type: "string" }, snapshotDate: { type: "string" }, count: { type: "number" }, vaults: { type: "array" } }, outputExample: { product: "Morpho Vaults V2 - Verified Census & Timelock Audit", snapshotDate: "2026-11-17", count: 68, vaults: [] } }, async () => morphoAuditProduct());
     }
     if (url.pathname === "/v1/crypto-alpha-feed" && (request.method === "GET" || request.method === "POST")) {
-      return handlePaidJson(request, env, url, { description: ALPHA_FEED_DESC, priceAtomic: ALPHA_FEED_PRICE, payTo: WORK_WALLET }, alphaFeedProduct);
+      return handlePaidJson(request, env, url, { description: ALPHA_FEED_DESC, priceAtomic: ALPHA_FEED_PRICE, payTo: WORK_WALLET, inputProps: {}, outputProps: { product: { type: "string" }, mode: { type: "string" }, generatedAt: { type: "string" }, count: { type: "number" }, vaults: { type: "array" } }, outputExample: { product: "Morpho Vaults V2 - Live TVL & APY Feed", mode: "live", count: 25, vaults: [] } }, alphaFeedProduct);
     }
     if (url.pathname === "/v1/base-gas-and-sequencer" && (request.method === "GET" || request.method === "POST")) {
-      return handlePaidJson(request, env, url, { description: GAS_DESC, priceAtomic: GAS_PRICE_ATOMIC, payTo: WORK_WALLET }, baseGasProduct);
+      return handlePaidJson(request, env, url, { description: GAS_DESC, priceAtomic: GAS_PRICE_ATOMIC, payTo: WORK_WALLET, inputProps: {}, outputProps: { gasPriceWei: { type: "string" }, gasPriceGwei: { type: "number" }, latestBlock: { type: "object" }, l1BlobBaseFeeWei: { type: "string" } }, outputExample: { gasPriceWei: "12000000", gasPriceGwei: 0.012 } }, baseGasProduct);
     }
     if (url.pathname === "/v1/defi-yield-radar" && (request.method === "GET" || request.method === "POST")) {
-      return handlePaidJson(request, env, url, { description: YIELD_DESC, priceAtomic: YIELD_PRICE_ATOMIC, payTo: WORK_WALLET }, yieldRadarProduct);
+      return handlePaidJson(request, env, url, { description: YIELD_DESC, priceAtomic: YIELD_PRICE_ATOMIC, payTo: WORK_WALLET, inputProps: {}, outputProps: { count: { type: "number" }, pools: { type: "array" } }, outputExample: { count: 20, pools: [{ chain: "Base", project: "morpho-blue", symbol: "USDC", apy: 5.1 }] } }, yieldRadarProduct);
     }
     if (url.pathname === "/v1/token-contract-guard" && (request.method === "GET" || request.method === "POST")) {
       const p = await inputParams(request, url);
-      return handlePaidJson(request, env, url, { description: GUARD_DESC, priceAtomic: GUARD_PRICE_ATOMIC, payTo: WORK_WALLET }, async () => tokenGuardProduct(p.address));
+      return handlePaidJson(request, env, url, { description: GUARD_DESC, priceAtomic: GUARD_PRICE_ATOMIC, payTo: WORK_WALLET, inputProps: { address: { type: "string", description: "Base ERC-20 contract address to screen (query ?address= or JSON body)" } }, inputRequired: ["address"], outputProps: { address: { type: "string" }, isProxy: { type: "boolean" }, checks: { type: "array" }, disclaimer: { type: "string" } }, outputExample: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", isProxy: false, checks: [] } }, async () => tokenGuardProduct(p.address));
     }
     if (url.pathname === "/v1/crypto-momentum-signals" && (request.method === "GET" || request.method === "POST")) {
-      return handlePaidJson(request, env, url, { description: MOMENTUM_DESC, priceAtomic: MOMENTUM_PRICE_ATOMIC, payTo: WORK_WALLET }, momentumProduct);
+      return handlePaidJson(request, env, url, { description: MOMENTUM_DESC, priceAtomic: MOMENTUM_PRICE_ATOMIC, payTo: WORK_WALLET, inputProps: {}, outputProps: { assets: { type: "array" } }, outputExample: { assets: [{ symbol: "BTC", lastPriceUsd: 100000, rsi14: 55.2 }] } }, momentumProduct);
     }
     if (url.pathname === "/v1/stablecoin-peg-monitor" && (request.method === "GET" || request.method === "POST")) {
-      return handlePaidJson(request, env, url, { description: PEG_DESC, priceAtomic: PEG_PRICE_ATOMIC, payTo: WORK_WALLET }, pegProduct);
+      return handlePaidJson(request, env, url, { description: PEG_DESC, priceAtomic: PEG_PRICE_ATOMIC, payTo: WORK_WALLET, inputProps: {}, outputProps: { coins: { type: "array" } }, outputExample: { coins: [{ symbol: "USDC", priceUsd: 0.9999, deviationBps: -1, status: "at peg" }] } }, pegProduct);
     }
     if (url.pathname === "/v1/fear-greed" && (request.method === "GET" || request.method === "POST")) {
-      return handlePaidJson(request, env, url, { description: FNG_DESC, priceAtomic: FNG_PRICE_ATOMIC, payTo: WORK_WALLET }, fearGreedProduct);
+      return handlePaidJson(request, env, url, { description: FNG_DESC, priceAtomic: FNG_PRICE_ATOMIC, payTo: WORK_WALLET, inputProps: {}, outputProps: { current: { type: "object" }, history30d: { type: "array" } }, outputExample: { current: { value: 11, classification: "Extreme Fear" }, history30d: [] } }, fearGreedProduct);
     }
     if (url.pathname === "/v1/base-wallet-scan" && (request.method === "GET" || request.method === "POST")) {
       const p = await inputParams(request, url);
-      return handlePaidJson(request, env, url, { description: WALLET_DESC, priceAtomic: WALLET_PRICE_ATOMIC, payTo: WORK_WALLET }, async () => walletScanProduct(p.address));
+      return handlePaidJson(request, env, url, { description: WALLET_DESC, priceAtomic: WALLET_PRICE_ATOMIC, payTo: WORK_WALLET, inputProps: { address: { type: "string", description: "Base address to scan (query ?address= or JSON body)" } }, inputRequired: ["address"], outputProps: { address: { type: "string" }, ethBalance: { type: "string" }, transactionCount: { type: "number" }, tokens: { type: "array" } }, outputExample: { ethBalance: "0", transactionCount: 0, tokens: [] } }, async () => walletScanProduct(p.address));
     }
     if (url.pathname === "/v1/ens-lookup" && (request.method === "GET" || request.method === "POST")) {
       const p = await inputParams(request, url);
-      return handlePaidJson(request, env, url, { description: ENS_DESC, priceAtomic: ENS_PRICE_ATOMIC, payTo: WORK_WALLET }, async () => ensProduct(p));
+      return handlePaidJson(request, env, url, { description: ENS_DESC, priceAtomic: ENS_PRICE_ATOMIC, payTo: WORK_WALLET, inputProps: { name: { type: "string", description: "ENS name to forward-resolve (query ?name= or JSON body)" }, address: { type: "string", description: "Address to reverse-resolve (query ?address= or JSON body)" } }, outputProps: { resolved: { type: "boolean" }, address: { type: "string" }, name: { type: "string" } }, outputExample: { resolved: true, name: "vitalik.eth", address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045" } }, async () => ensProduct(p));
     }
     return json({ error: "not found" }, 404);
   },

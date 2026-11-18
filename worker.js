@@ -420,7 +420,11 @@ async function handleRelay(request, env) {
 // with current APY/net APY/fees fetched from the Morpho Blue API at request
 // time; if that API is unreachable it falls back to the dated snapshot and
 // says so in the payload (mode: "snapshot-fallback").
-const WORK_WALLET = "0xDfe09D14E888Df4C8024CfC03E982d8CBC08E08E";
+// Phase 22 (2026-11-18): fleet payTo switched to the ABF/Synmerco wallet
+// 0x8488...2ef6 — PayAPI Market's provider wallet on record; its triage
+// auto-rejects challenges paying any other address (challenge_payto).
+// Previously the Arena42/promotedby work wallet 0xDfe09D14...C08E08E.
+const WORK_WALLET = "0x8488E45d428a3B2BC7116c8657b8FF23Cd042ef6";
 const MORPHO_AUDIT_PRICE = "100000"; // $0.10 USDC
 const ALPHA_FEED_PRICE = "50000"; // $0.05 USDC
 const MORPHO_AUDIT_DESC = "Morpho Vaults V2 census: 68 vaults >= $5M TVL on Ethereum/Base/Arbitrum with on-chain owner, curator and per-function timelock values verified via 1,632 dual-RPC eth_calls at pinned finalized blocks (snapshot 2026-11-17).";

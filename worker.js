@@ -777,6 +777,17 @@ export default {
     if (url.pathname === "/ask") return getAskApp(env).fetch(request, env, ctx);
     const FAC = (env.FACILITATOR_URL || "https://facilitator.payai.network").replace(/\/$/, "");
     if (url.pathname === "/health") return json({ ok: true, service: "lens-extract", version: "1.0.0" });
+    if (url.pathname === "/webhook/clawhunt") {
+      // ClawHunt solver-callback receiver for our agent (VanceSterling).
+      // Acknowledges every callback with 200; payload is logged for review.
+      // Task state is always re-checked through the ClawHunt API before acting.
+      if (request.method === "POST") {
+        const body = await request.text().catch(() => "");
+        console.log("clawhunt webhook:", body.slice(0, 4000));
+        return json({ ok: true, received: true });
+      }
+      return json({ ok: true, service: "clawhunt-webhook" });
+    }
     if (url.pathname === "/openapi.json") return json(openApiDoc(url.origin));
     if (url.pathname === "/" || url.pathname === "/.well-known/x402" || url.pathname === "/.well-known/x402.json") {
       return json({ name: "LensExtract", x402Version: 2, endpoints: [{ method: "POST", path: "/v1/extract", price: "$0.001", network: caip2(env), asset: USDC_BASE, payTo: payTo(env) }, { method: "GET", path: "/v1/morpho-vault-audit", price: "$0.10", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/crypto-alpha-feed", price: "$0.05", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/base-gas-and-sequencer", price: "$0.005", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/defi-yield-radar", price: "$0.01", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/token-contract-guard", price: "$0.01", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/crypto-momentum-signals", price: "$0.01", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/stablecoin-peg-monitor", price: "$0.005", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/fear-greed", price: "$0.005", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/base-wallet-scan", price: "$0.01", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/v1/ens-lookup", price: "$0.005", network: "eip155:8453", asset: USDC_BASE, payTo: WORK_WALLET }, { method: "GET", path: "/ask", price: "10 sats", network: "stacks:1", asset: "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token", payTo: ASK_PAY_TO }], legacy: "x402 v1 payments (X-PAYMENT header, network \"base\") are also accepted on the Base USDC routes." });
